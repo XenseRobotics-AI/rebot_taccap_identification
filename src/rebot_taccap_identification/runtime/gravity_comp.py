@@ -44,6 +44,7 @@ import numpy as np
 from ..export import load_offsets, offsets_path
 from ..io import save_motion_csv
 from ..results import Results
+from ..resources import bundle_urdf, relative_reference, resource_digest
 from ..robots import Robot
 from .common import (
     Controller, Dynamics, Limits, Monitor, SafetyStop, Ticker, add_common_args, check_clearance,
@@ -302,7 +303,13 @@ def keep_log(robot: Robot, dynamics: Dynamics, log: list, args):
     path = results.gravity_dir / f"{name}.csv"
     stamp, q, dq, tau, tau_cmd, kd = (np.array(c) for c in zip(*log))
     save_motion_csv(path, stamp - stamp[0], q=q, dq=dq, tau=tau, taucmd=tau_cmd, kd=kd)
-    meta = {"urdf": str(dynamics.robot.source), "rate": args.rate, "full_urdf": bool(args.full_urdf),
+    source = dynamics.robot.source
+    if not source.resolve().is_relative_to(results.root.resolve()):
+        snapshot = results.gravity_dir / "models" / resource_digest(source) / source.name
+        if not snapshot.is_file():
+            bundle_urdf(source, snapshot)
+        source = snapshot
+    meta = {"urdf": relative_reference(source, path.parent), "rate": args.rate, "full_urdf": bool(args.full_urdf),
             "table_z": args.table_z, "ff_scale": np.asarray(args.ff_scale_used, dtype=float).tolist()}
     path.with_suffix(".meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
     print(f"\n已保存重力补偿记录 {path}", flush=True)

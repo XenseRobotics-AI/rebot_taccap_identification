@@ -33,7 +33,7 @@ def _motors() -> list[dict]:
 @RobotConfig.register_subclass("rebot_b601_rs")
 @dataclass(kw_only=True)
 class RebotB601RSConfig(RobotConfig):
-    urdf: str = str(URDF)
+    urdf: str = "package://rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/urdf/rebot_b601_rs.urdf"
     tip_link: str | None = "link6"
     name: str | None = "rebot_b601_rs"             # exported: rebot_b601_rs_identified_<version>.urdf
     channel: str = "can0"                          # CAN interface (PCAN-USB)

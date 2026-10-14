@@ -2,8 +2,8 @@
 
 The URDF keeps the source kinematics and visuals. Each movable link gets the
 given inertial parameters (fixed children that were folded into it lose theirs), links
-below ``tip_link`` are removed, and relative mesh paths become absolute paths of this
-machine (``package.py`` writes a self-contained copy). Every link must have a positive
+below ``tip_link`` are removed, and meshes are copied beside the model and referenced
+by relative paths. Every link must have a positive
 mass and a positive definite inertia about its centre of mass, or all-zero parameters (a
 massless frame, written without an inertial).
 
@@ -21,7 +21,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 
 from .urdf import URDFRobotModel
-from .visual import _resolve_mesh
+from .resources import copy_meshes
 
 
 def inertial_to_urdf(parameters: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
@@ -103,17 +103,14 @@ def export_urdf(robot: URDFRobotModel, inertial: np.ndarray, out: str | Path, *,
                 links[child].remove(old)
             stack.extend(j for j in child_joints[child] if j.get("type") == "fixed")
 
-    for mesh in root.iter("mesh"):
-        filename = mesh.get("filename", "")
-        if filename and not filename.startswith(("package://", "file://")) and not Path(filename).is_absolute():
-            mesh.set("filename", str(_resolve_mesh(filename, robot.source).resolve()))
+    out = Path(out)
+    copy_meshes(root, robot.source, out)
 
-    header = (f" Identified by rebot_taccap_identification on {datetime.now():%Y-%m-%d %H:%M}. Source: {robot.source.resolve()}."
+    header = (f" Identified by rebot_taccap_identification on {datetime.now():%Y-%m-%d %H:%M}. Source: {robot.source.name}."
               f" Inertia of {', '.join(robot.link_names)} replaced"
               + (f"; removed below {tip_link}: {', '.join(removed)}" if removed else "") + (f". {note}" if note else "") + " ")
     root.insert(0, ET.Comment(header))
     ET.indent(tree, space="  ")
-    out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     tree.write(out, encoding="utf-8", xml_declaration=True)
     return removed

@@ -76,6 +76,13 @@ class RobotConfig(abc.ABC):
         return getattr(type(self), "_type_name", type(self).__name__)
 
     def resolve(self, path: str | Path) -> Path:
+        prefix = "package://rebot_taccap_identification/"
+        if str(path).startswith(prefix):
+            package = Path(__file__).resolve().parents[1]
+            resolved = (package / str(path)[len(prefix):]).resolve()
+            if not resolved.is_relative_to(package):
+                raise ValueError("package URI 不能引用包外的文件")
+            return resolved
         path = Path(path).expanduser()
         return path if path.is_absolute() else (project_root() / path).resolve()
 

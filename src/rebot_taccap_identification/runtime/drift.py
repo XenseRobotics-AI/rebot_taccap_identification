@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from ..io import named_columns, read_named_csv
+from ..resources import resolve_reference
 from ..robots import Robot
 from .common import Dynamics, check_clearance
 
@@ -236,7 +237,7 @@ def main(argv=None) -> None:
     robot = cli_robot()
     meta_path = Path(args.log).with_suffix(".meta.json")
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-    urdf = args.urdf or meta.get("urdf")
+    urdf = args.urdf or (resolve_reference(meta["urdf"], meta_path.parent) if meta.get("urdf") else None)
     dynamics = Dynamics.for_robot(robot, urdf, full=bool(meta.get("full_urdf")))
     table_z = args.table_z if args.table_z is not None else meta.get("table_z", robot.config.table_z)
     out = Path(args.out) if args.out else Results.for_robot(robot).package_of(dynamics.robot.source).poses(

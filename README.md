@@ -32,7 +32,7 @@ pip install -e .
 已有独立夹爪仓库时也可以直接使用它：
 
 ```bash
-rebot_taccap_identification studio --robot.gripper_repo=/home/xense/rebot_lerobot/XTac-UMI-Description
+rebot_taccap_identification studio --robot.gripper_repo=../XTac-UMI-Description
 ```
 
 wheel 不包含第三方仓库；在源码目录之外使用 wheel 时，通过 `--robot.gripper_repo=<仓库目录>` 指定已初始化的夹爪仓库，也可以用 `--robot.gripper_urdf=<URDF文件>` 指定其它独立夹爪模型。
@@ -61,7 +61,9 @@ rebot_taccap_identification studio
 rebot_taccap_identification studio --robot.channel=can1
 ```
 
-本项目只随附 reBot B601-RS 机械臂和 C1 转接件的 URDF、网格，位于 `src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/`（来源见 [sources.json](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/sources.json)，许可见 [LICENSES/](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/LICENSES/)）。夹爪从 `third_party/XTac-UMI-Description` 的资产清单读取裸从夹爪 URDF；运行时与机械臂、C1 装配成临时组合 URDF，夹爪网格直接引用第三方仓库。`link6` 是第六轴输出面的虚拟坐标系，没有质量；C1 和夹爪挂在它下面，整体参与负载辨识。电机配置、默认增益、软限位见 [src/rebot_taccap_identification/robots/rebot_b601_rs/README.md](src/rebot_taccap_identification/robots/rebot_b601_rs/README.md)。
+本项目只随附 reBot B601-RS 机械臂和 C1 转接件的 URDF、网格，位于 `src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/`（来源见 [sources.json](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/sources.json)，许可见 [LICENSES/](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/LICENSES/)）。夹爪从 `third_party/XTac-UMI-Description` 的资产清单读取裸从夹爪 URDF；运行时与机械臂、C1 装配成带相对网格路径的资源快照，夹爪模型和网格的源文件仍由第三方仓库提供。`link6` 是第六轴输出面的虚拟坐标系，没有质量；C1 和夹爪挂在它下面，整体参与负载辨识。电机配置、默认增益、软限位见 [src/rebot_taccap_identification/robots/rebot_b601_rs/README.md](src/rebot_taccap_identification/robots/rebot_b601_rs/README.md)。
+
+默认机械臂路径使用 `package://rebot_taccap_identification/...` 资源标识，外部仓库可以使用项目相对路径。运行时组合模型会生成含相对网格引用的资源快照；辨识模型同样携带 `meshes/` 和许可文件，移动整个模型目录仍可加载。新结果 JSON 的文件引用相对于 JSON 所在目录解析。
 
 ## 2. 流程
 
@@ -133,7 +135,7 @@ rebot_taccap_identification studio --robot.channel=can1
 碰撞检查包含每个位姿两侧 ±`--delta`（默认 5°）的接近动作；桌面高度（第 0 步，`--table-z`）要按实际填，安全距离 `--clearance` 默认 10 mm。
 4. 结果在 `gripper/models/<本体版本>/`，第 3 步的模型列表里显示为“辨识 v3+gripper”，可以直接做重力补偿检验。用它做补偿时，漂移分析的补点会存进 `gripper/`，按钮变成“载入建议位姿 → 第 4 步负载静态（gripper）”。
 
-负载关于质心的惯量取运行时组合 URDF 中 `link6` 以下部件（C1、第三方夹爪本体、手指在 0 位）的合成惯量，按辨识质量缩放（静态数据看不到惯量，重力补偿也不需要）；自定义完整 URDF 没有这些部件时按 `--radius` 的实心球估计。初始夹爪资产中这些部件合计约 1.169 kg，质心在 link6 系 [−24.1, 0.3, 104.1] mm；更新第三方模型后以实际加载的 URDF 为准。`payload.json` 记录辨识使用的组合 URDF 路径和 SHA-256。
+负载关于质心的惯量取运行时组合 URDF 中 `link6` 以下部件（C1、第三方夹爪本体、手指在 0 位）的合成惯量，按辨识质量缩放（静态数据看不到惯量，重力补偿也不需要）；自定义完整 URDF 没有这些部件时按 `--radius` 的实心球估计。初始夹爪资产中这些部件合计约 1.169 kg，质心在 link6 系 [−24.1, 0.3, 104.1] mm；更新第三方模型后以实际加载的 URDF 为准。负载模型旁的 `arm_model/`、`cad_model/` 保存辨识时的本体和 CAD 资源快照，`payload.json` 以相对路径引用它们，并记录 CAD 快照的 SHA-256。导出该结果时使用记录的 CAD 快照，因此后来更新夹爪仓库也不会改变历史结果对应的几何。
 
 ⚠ 任一电机驱动（MOS）温度超过 100 °C（`--max-temp`）时自动安全停止。
 
@@ -165,10 +167,14 @@ models/v1/              第 2 步：每个版本一个目录
   rebot_b601_rs_identified_v1_offset.yaml  关节力矩偏置（重力补偿和验收自动加上）
   result.json                          质量、质心、偏置、残差
   inputs.json                          用了哪些数据和设置
+  meshes/                              辨识模型引用的网格（相对路径）
+  LICENSES/                            资源许可与来源声明
 gravity/                第 3 步：free 模式重力补偿记录（漂移分析用）
 gripper/                第 4 步：负载数据包（static/ gravity/ models/<本体版本>/）
 export/                 第 5 步：完整 URDF 包
 ```
+
+重力日志的 `.meta.json` 使用相对模型路径；使用临时组合模型时，其资源快照保存在 `gravity/models/` 下。移动整个结果目录后，负载导出和漂移分析仍能找到相应模型。
 
 力矩标定存放在 `~/.cache/rebot_taccap_identification/calibration/robots/rebot_b601_rs/<id 或 default>.json`（可用 `--robot.calibration_dir` 指定目录）。
 

@@ -19,6 +19,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .resources import relative_reference
+
 
 def _names(folder: Path, pattern: str, suffix: str) -> list[str]:
     return sorted(p.name[:-len(suffix)] for p in folder.glob(pattern)) if folder.is_dir() else []
@@ -149,4 +151,19 @@ class Results:
 
     def save_inputs(self, version: str, **inputs) -> None:
         self.model_dir(version).mkdir(parents=True, exist_ok=True)
+        directory = self.model_dir(version)
+        if "files" in inputs:
+            references = []
+            for value in inputs["files"]:
+                filename, separator, weight = str(value).rpartition("@")
+                try:
+                    if not separator:
+                        raise ValueError
+                    float(weight)
+                except ValueError:
+                    filename, separator, weight = str(value), "", ""
+                references.append(relative_reference(filename, directory) + (separator + weight))
+            inputs["files"] = references
+        if inputs.get("arm") and Path(inputs["arm"]).is_file():
+            inputs["arm"] = relative_reference(inputs["arm"], directory)
         self.inputs(version).write_text(json.dumps(inputs, indent=2, ensure_ascii=False))

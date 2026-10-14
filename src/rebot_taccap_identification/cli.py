@@ -15,6 +15,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .resources import bundle_urdf, relative_reference, resolve_reference
+
 DEFAULT_ROBOT = "rebot_b601_rs"
 
 HARDWARE_COMMANDS = {
@@ -108,7 +110,7 @@ def cmd_identify(args: argparse.Namespace) -> int:
     export_urdf(model, result.inertial, out, tip_link=robot.config.tip_link,
                 note=f"Mass and centre of mass from static data ({len(q)} poses); inertia about each CoM from CAD")
     write_offsets(offsets_path(out), model.joint_names, result.offset, source=str(out.name))
-    summary = {"version": version, "urdf": str(out), "mass_kg": result.mass.tolist(), "com_m": result.com.tolist(),
+    summary = {"version": version, "urdf": out.name, "mass_kg": result.mass.tolist(), "com_m": result.com.tolist(),
                "offset_nm": result.offset.tolist(), "rmse_nm": result.rmse.tolist(), "rank": result.rank,
                "samples": result.n_samples, "notes": result.notes}
     results.result(version).write_text(json.dumps(summary, indent=2, ensure_ascii=False))
@@ -158,14 +160,17 @@ def cmd_payload(args: argparse.Namespace) -> int:
     for note in result.notes:
         print("note: " + note)
     out = Path(args.out_urdf)
+    arm_snapshot = bundle_urdf(base, out.parent / "arm_model" / base.name)
+    cad_snapshot = bundle_urdf(cad_template, out.parent / "cad_model" / cad_template.name)
     export_urdf(model, with_payload(model, result.parameters), out, tip_link=robot.config.tip_link,
-                note=f"Payload {args.name} ({result.mass:.3f} kg) merged into {link}; arm model {base.resolve()}")
+                note=f"Payload {args.name} ({result.mass:.3f} kg) merged into {link}; arm model {base.name}")
     write_offsets(offsets_path(out), model.joint_names, result.offset,
                   source=f"{base.name} + payload {args.name} (last joint refitted)")
     info = {"name": args.name, "link": link, "mass_kg": result.mass, "com_m": result.com.tolist(),
-            "cad_urdf": str(cad_template), "cad_urdf_sha256": hashlib.sha256(cad_template.read_bytes()).hexdigest(),
+            "cad_urdf": relative_reference(cad_snapshot, out.parent),
+            "cad_urdf_sha256": hashlib.sha256(cad_snapshot.read_bytes()).hexdigest(),
             "inertial_10": result.parameters.tolist(), "inertia_source": result.inertia_source,
-            "arm_urdf": str(base.resolve()), "rmse_arm": result.rmse_arm.tolist(),
+            "arm_urdf": relative_reference(arm_snapshot, out.parent), "rmse_arm": result.rmse_arm.tolist(),
             "rmse_with_payload": result.rmse_payload.tolist(), "offset_nm": result.offset.tolist(),
             "torque_gain": gain.tolist(), "notes": result.notes}
     out.with_name("payload.json").write_text(json.dumps(info, indent=2, ensure_ascii=False))
@@ -187,8 +192,10 @@ def cmd_package(args: argparse.Namespace) -> int:
     robot = _robot()
     model = Path(args.model)
     payload = find_payload(model)
-    arm = Path(payload["arm_urdf"]) if payload else model
-    template = Path(args.template or robot.config.urdf_path)
+    arm = resolve_reference(payload["arm_urdf"], model.parent) if payload else model
+    saved_template = resolve_reference(payload["cad_urdf"], model.parent) if payload and payload.get("cad_urdf") else None
+    template = Path(args.template) if args.template else (
+        saved_template if saved_template is not None and saved_template.is_file() else robot.config.urdf_path)
     tip_link = robot.config.tip_link
     tag = model.stem.split("_identified_")[-1] if "_identified_" in model.stem else model.stem
     name = args.name or f"{template.stem}_{tag}" + (f"_{payload.get('name', 'payload')}" if payload else "")

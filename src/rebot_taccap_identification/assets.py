@@ -11,6 +11,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 from .visual import _resolve_mesh
+from .resources import copy_asset_notices, copy_file, mesh_name
 
 
 def gripper_urdf(repository: str | Path) -> Path:
@@ -80,7 +81,7 @@ def compose_urdf(arm: str | Path, gripper: str | Path, *, parent_link: str,
                  xyz=(0.0, 0.0, 0.0), rpy=(0.0, 0.0, 0.0), cache_dir: str | Path | None = None) -> Path:
     """Build a cached template, preserving upstream gripper joints, inertials and geometry.
 
-    Meshes remain in their source repositories; only their paths become absolute. The
+    Meshes are snapshotted into the generated bundle and use relative paths. The
     cache changes when either URDF, the mounting transform or mesh metadata changes.
     No Git or network operation runs while loading a robot.
     """
@@ -97,15 +98,19 @@ def compose_urdf(arm: str | Path, gripper: str | Path, *, parent_link: str,
     if mount_name in (_names(root, "joint") | _names(tool, "joint")):
         raise ValueError(f"URDF 已包含安装关节 {mount_name}")
 
-    mesh_states = []
+    mesh_states, meshes = [], {}
     for element, source in ((root, arm), (tool, gripper)):
         for mesh in element.iter("mesh"):
             path = _resolve_mesh(mesh.get("filename", ""), source).resolve()
             if not path.is_file():
                 raise FileNotFoundError(f"URDF {source} 引用的网格不存在：{path}")
-            mesh.set("filename", str(path))
+            target = mesh_name(path)
+            if target in meshes and meshes[target] != path:
+                raise ValueError(f"机械臂和夹爪的网格名称冲突：{target}")
+            meshes[target] = path
+            mesh.set("filename", "meshes/" + target)
             stat = path.stat()
-            mesh_states.append((str(path), stat.st_mtime_ns, stat.st_size))
+            mesh_states.append((target, stat.st_mtime_ns, stat.st_size))
 
     materials = {m.get("name"): m for m in root.findall("material")}
     for element in tool:
@@ -119,7 +124,7 @@ def compose_urdf(arm: str | Path, gripper: str | Path, *, parent_link: str,
     ET.SubElement(mount, "child", link=tool_root)
     ET.SubElement(mount, "origin", xyz=_vector_text(xyz, "gripper_xyz"), rpy=_vector_text(rpy, "gripper_rpy"))
     root.set("name", arm.stem + "_taccap")
-    root.insert(0, ET.Comment(f" Composed from arm {arm} and external gripper {gripper}. "))
+    root.insert(0, ET.Comment(f" Composed from arm {arm.name} and external gripper {gripper.name}. "))
     ET.indent(root, space="  ")
     data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     digest = hashlib.sha256(data + json.dumps(mesh_states).encode()).hexdigest()
@@ -127,6 +132,9 @@ def compose_urdf(arm: str | Path, gripper: str | Path, *, parent_link: str,
     output = cache / digest / f"{arm.stem}_taccap.urdf"
     if not output.is_file():
         output.parent.mkdir(parents=True, exist_ok=True)
+        for target, source in meshes.items():
+            copy_file(source, output.parent / "meshes" / target)
+        copy_asset_notices(meshes.values(), output.parent)
         with tempfile.NamedTemporaryFile(dir=output.parent, delete=False) as file:
             temporary = Path(file.name)
             file.write(data)

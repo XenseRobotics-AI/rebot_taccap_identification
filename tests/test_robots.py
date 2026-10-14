@@ -58,7 +58,7 @@ def test_rebot_registers_and_ships_urdf_and_meshes():
     robot = make_robot("rebot_b601_rs")
     assert len(robot.config.motors) == 6
     package = Path(rebot_taccap_identification.robots.__file__).parent / "rebot_b601_rs"
-    model = RobotModel.from_urdf(robot.config.urdf_path, tip_link=robot.config.tip_link)
+    model = RobotModel.from_urdf(robot.config.resolve(robot.config.urdf), tip_link=robot.config.tip_link)
     for visual in load_visuals(model, robot.config.tip_link):
         if visual.kind == "mesh":
             assert visual.path.is_file() and visual.path.resolve().is_relative_to(package), visual.path

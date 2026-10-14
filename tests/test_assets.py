@@ -46,7 +46,8 @@ def test_manifest_and_source_updates_change_payload_without_changing_arm(tmp_pat
     body_before = cad_payload(before, "link6")
     assert body_before[0] == pytest.approx(0.32)
     tool_visuals = load_visuals(model_before, "link6", tool=True)
-    assert any(v.path == mesh for v in tool_visuals)
+    assert any(v.path is not None and v.path.name == mesh.name and v.path.read_bytes() == mesh.read_bytes()
+               for v in tool_visuals)
     assert ET.parse(before).find("joint[@name='external_finger_joint']").get("type") == "revolute"
 
     external_gripper(tmp_path, mass=0.7)

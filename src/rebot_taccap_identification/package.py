@@ -32,6 +32,7 @@ import numpy as np
 
 from .export import _set_inertial, inertial_to_urdf, set_link_inertial
 from .payload import cad_payload
+from .resources import copy_asset_notices as _copy_asset_notices, mesh_name as _mesh_name
 from .robot import RobotModel
 from .urdf import _inertial, _origin
 from .visual import _resolve_mesh
@@ -55,41 +56,6 @@ def find_payload(model_urdf: str | Path) -> dict | None:
     """``payload.json`` written by ``rebot_taccap_identification payload`` next to a payload model, else None."""
     path = Path(model_urdf).with_name("payload.json")
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
-
-
-def _mesh_name(source: Path) -> str:
-    """Where a mesh goes inside ``meshes/``: its path below the last ``meshes`` folder of its
-    source. Flat mesh directories use their asset package name as a namespace,
-    so an external gripper's ``base_link.STL`` cannot overwrite the arm's."""
-    parts = source.resolve().parts
-    if "meshes" in parts[:-1]:
-        relative = "/".join(parts[len(parts) - parts[::-1].index("meshes"):])
-        return relative if "/" in relative else f"{source.parent.parent.name}/{relative}"
-    return source.name
-
-
-def _copy_asset_notices(meshes, out_dir: Path) -> None:
-    """Keep asset notices beside exported geometry, including an external repo's license."""
-    packages = set()
-    for mesh in meshes:
-        package = next((p for p in Path(mesh).parents
-                        if (p / "asset.json").is_file() or (p / "sources.json").is_file()), None)
-        if package is not None:
-            packages.add(package)
-    for package in sorted(packages):
-        target = out_dir / "LICENSES" / package.name
-        files = [p for p in (package / "LICENSES").rglob("*") if p.is_file()]
-        files += [p for p in (package / "NOTICE.md", package / "LICENSE") if p.is_file()]
-        for source in files:
-            destination = target / source.relative_to(package)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
-        if (package / "asset.json").is_file() and not (package / "LICENSE").is_file():
-            # XTac assets keep the MIT license at the external repository root.
-            license_file = next((p / "LICENSE" for p in package.parents if (p / "LICENSE").is_file()), None)
-            if license_file is not None:
-                target.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(license_file, target / "LICENSE")
 
 
 def _children(root: ET.Element) -> dict[str, list[ET.Element]]:

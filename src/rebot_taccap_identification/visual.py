@@ -41,6 +41,8 @@ def _resolve_mesh(filename: str, urdf_path: Path) -> Path:
         return Path(filename[7:])
     if filename.startswith("package://"):
         package, _, relative = filename[10:].partition("/")
+        if package == "rebot_taccap_identification":
+            return Path(__file__).resolve().parent / relative
         for parent in urdf_path.resolve().parents:
             if parent.name == package:
                 return parent / relative
