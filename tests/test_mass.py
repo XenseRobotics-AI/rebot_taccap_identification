@@ -127,7 +127,10 @@ def test_package_export_with_and_without_payload(tmp_path):
                "inertial_10": payload_parameters(0.6, np.array([0.01, 0.0, 0.05]), cad[2] * 0.6 / cad[0]).tolist()}
     full = export_package(template, arm_urdf, tmp_path / "full", tip_link="link6", payload=payload)
     # Arm and gripper both have a base_link.STL: sub-folders keep them apart.
-    assert {"rebot_b601_rs/base_link.STL", "taccap_g1_slave/base_link.STL"} <= set(full.meshes)
+    assert {"rebot_b601_rs/base_link.STL", "taccap_description/base_link.STL"} <= set(full.meshes)
+    external_package = config.gripper_urdf_path.parents[1]
+    assert (tmp_path / "full/LICENSES/taccap_description/NOTICE.md").read_bytes() == (external_package / "NOTICE.md").read_bytes()
+    assert (tmp_path / "full/LICENSES/taccap_description/LICENSE").is_file()
     assert ET.parse(full.urdf).getroot().find("link[@name='link6']/inertial") is None
     np.testing.assert_allclose(full.payload["com_m"], payload["com_m"], atol=1e-9)
     np.testing.assert_allclose(RobotModel.from_urdf(full.urdf, tip_link="link6").nominal_parameters[:, :10],
@@ -142,7 +145,11 @@ def test_full_urdf_counts_links_below_tip_as_payload():
     cut = Dynamics(config.urdf_path, config.tip_link)
     full = Dynamics(config.urdf_path, config.tip_link, full=True)
     body = cad_payload(config.urdf_path, config.tip_link)
-    assert full.payload_mass == pytest.approx(body[0]) == pytest.approx(0.02 + 0.415 + 2 * 0.36678)
+    import xml.etree.ElementTree as ET
+
+    gripper = ET.parse(config.gripper_urdf_path).getroot()
+    gripper_mass = sum(float(m.get("value")) for m in gripper.findall("link/inertial/mass"))
+    assert full.payload_mass == pytest.approx(body[0]) == pytest.approx(0.02 + gripper_mass)
     q = np.random.default_rng(0).uniform(-1, 1, (20, 6))
     merged = cut.robot.nominal_parameters[:, :10].copy()
     merged[-1] += payload_parameters(*body)

@@ -7,6 +7,7 @@ is read-only. The robot defaults to ``rebot_b601_rs``.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import json
 import sys
@@ -143,7 +144,8 @@ def cmd_payload(args: argparse.Namespace) -> int:
     offset = load_offsets(offsets_path(base), model.joint_names) if offsets_path(base).exists() else None
     q, tau, weights = load_statics(args.static, robot.dof)
     gain = _gain(robot, args.torque_gain)
-    cad = cad_payload(robot.config.urdf_path, model.link_names[-1])
+    cad_template = robot.config.urdf_path
+    cad = cad_payload(cad_template, model.link_names[-1])
     result = fit_payload(model, q, tau / gain, offset=offset, sample_weights=weights, radius=args.radius, cad=cad)
     link = model.link_names[-1]
     print(f"负载 {args.name}（固定在 {link} 上）：质量 {result.mass:.3f} kg，"
@@ -161,6 +163,7 @@ def cmd_payload(args: argparse.Namespace) -> int:
     write_offsets(offsets_path(out), model.joint_names, result.offset,
                   source=f"{base.name} + payload {args.name} (last joint refitted)")
     info = {"name": args.name, "link": link, "mass_kg": result.mass, "com_m": result.com.tolist(),
+            "cad_urdf": str(cad_template), "cad_urdf_sha256": hashlib.sha256(cad_template.read_bytes()).hexdigest(),
             "inertial_10": result.parameters.tolist(), "inertia_source": result.inertia_source,
             "arm_urdf": str(base.resolve()), "rmse_arm": result.rmse_arm.tolist(),
             "rmse_with_payload": result.rmse_payload.tolist(), "offset_nm": result.offset.tolist(),

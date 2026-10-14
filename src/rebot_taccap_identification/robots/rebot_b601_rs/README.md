@@ -28,7 +28,9 @@ rebot_taccap_identification studio
   sudo ip link set can0 up
   ```
 - 末端空载，`q = 0` 对应 URDF 零位。电机原始坐标与 URDF 一致（方向 1、偏置 0），静态核对会再验证一遍。
-- URDF 和网格在 `urdf/rebot_b601_rs_taccap/`，复制自 `rebot-taccap-urdf` 资产包（来源仓库提交号和网格哈希见其中的 `sources.json`，许可见 `LICENSES/`）；也可以用 `--robot.urdf=<路径>` 指定别的。
+- 本项目只保存机械臂与 C1 的 URDF 和网格，位于 `urdf/rebot_b601_rs/`（来源和网格哈希见 `sources.json`，许可见 `LICENSES/`）。夹爪来自 `third_party/XTac-UMI-Description` 子模块的资产清单，运行时装配，不复制进本包；在项目根目录用 `git submodule update --init --remote -- third_party/XTac-UMI-Description` 跟进最新 `main`。
+- `--robot.gripper_repo=<目录>` 可改用独立夹爪仓库，`--robot.gripper_urdf=<文件>` 可直接选择外部夹爪 URDF。安装接口由 `gripper_parent_link`、`gripper_xyz` 和 `gripper_rpy` 配置；默认连接 C1 的 `adapter_link`，沿其 y 轴偏移 14 mm，绕 y、z 各转 90°。使用的是裸从夹爪，不再重复加入 Asm_link 转接件。
+- `--robot.urdf=<路径>` 指定的是完整自定义机器人模型，按该文件加载，不额外挂载默认夹爪。上面的 CAD 质量/质心表为初始资产的参考值，更新第三方模型后以新模型为准。
 - C1 的安装分度为电机侧 +90°、夹爪侧 −90°，`joint6` 是原厂零位、限位 ±3.14，与 xense-description 的 `seeed_rebotb601rs_single` 装配一致。
 - ⚠️ 不要在装好的机械臂上运行会把当前位置写入 flash 作为零点的工具（例如 motorbridge 的 `robstride_all_interfaces_demo.py`）。
 

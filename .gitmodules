@@ -1,0 +1,4 @@
+[submodule "third_party/XTac-UMI-Description"]
+	path = third_party/XTac-UMI-Description
+	url = https://github.com/XenseRobotics-AI/XTac-UMI-Description.git
+	branch = main

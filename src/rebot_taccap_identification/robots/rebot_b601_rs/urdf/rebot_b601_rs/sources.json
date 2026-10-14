@@ -1,15 +1,9 @@
 {
-  "robot": "rebot_b601_rs_taccap",
-  "generator": "scripts/build_urdf.py",
+  "robot": "rebot_b601_rs",
   "repositories": {
     "xense-description": {
       "url": "https://github.com/XenseRobotics-AI/xense-description",
       "commit": "0c5cb401ee25fffac88d8245ea5a2be0c013f941",
-      "clean": true
-    },
-    "XTac-UMI-Description": {
-      "url": "https://github.com/XenseRobotics-AI/XTac-UMI-Description",
-      "commit": "04c7f8d0da334a7a63bc3c3b0a186387d8cdc52c",
       "clean": true
     }
   },
@@ -28,11 +22,6 @@
       "repository": "xense-description",
       "path": "assets/mounts/tool_adapters/seeed_rebot_b601_rs_to_taccap_slave/plan.json",
       "sha256": "99e660f26a6a48c7df228b19b5f5d11a7ce0d5adb33c4d3929c05ab77a6db788"
-    },
-    "slave": {
-      "repository": "XTac-UMI-Description",
-      "path": "ros/taccap_description/urdf/taccap_g1_slave.urdf",
-      "sha256": "cbdfc4e045d473c52238ecf13e48518fe7c4a31c008cd5be51b81b6bda64a8fd"
     }
   },
   "connections": {
@@ -47,12 +36,6 @@
       "child": "adapter_link",
       "xyz": "0 0 0",
       "rpy": "1.570796326794897 0 1.570796326794897"
-    },
-    "adapter_to_taccap": {
-      "parent": "adapter_link",
-      "child": "taccap_base_link",
-      "xyz": "0 0.014 0",
-      "rpy": "0 1.570796326794897 1.570796326794897"
     }
   },
   "meshes": {
@@ -77,17 +60,18 @@
     "meshes/rebot_b601_rs/pla3_green.STL": "7aee9689f19b6cb697bc81e2005b2652a1fad2887798108d96500bd82796b212",
     "meshes/rebot_b601_rs/pla3_seeed_badge_with_counters.STL": "24f7fb2daafafc408eda5a23b7a71cad6a0de65533a2d8ea0703916bf3857a1f",
     "meshes/rebot_b601_rs/pla3_seeed_wordmark_backing.STL": "b837592ca2910576526e3806f0c96c19e3eac8ba197e38149f1e7935932b4208",
-    "meshes/rebot_b601_rs/pla5_green.STL": "d8810ec3fe0a9cb56d5fb9939d6f826b8cc62dd2691131aa44ccf9f9d01cc547",
-    "meshes/taccap_g1_slave/base_link.STL": "fed33d6ec5113b8e34e65c096cb1ba7a6612f1f87e25fc6337ff11a45a5425ad",
-    "meshes/taccap_g1_slave/grip_left.STL": "9e14cf420497cd065271d5acb5be96e80c5e1759de85b396f1babb0b1635d594",
-    "meshes/taccap_g1_slave/grip_right.STL": "27822304badd4078e85e96a55be886266ea7439b6861151eaa5bcec99cb490c3"
+    "meshes/rebot_b601_rs/pla5_green.STL": "d8810ec3fe0a9cb56d5fb9939d6f826b8cc62dd2691131aa44ccf9f9d01cc547"
   },
-  "urdf_sha256": "500798ef448437a96b7e7c5af0e4f1c378ded0b60b6fb163e76fcfd50585874d",
+  "urdf_sha256": "5319bc11381d2c9e23080f90e14f4fcf2768c8988f748aa462d77837074c4053",
   "licenses": {
     "LICENSES/C1_ADAPTER_NOTICE.md": "1ca00a0ec72b237343dc3d307db8a774f6269a6011308a32db8f1e63e8612663",
-    "LICENSES/REBOT_B601_RS_CERN-OHL-W-2.0": "e258a9c6833bfd17fb90252df8c33e29d13fabc2768508248927824c17878db7",
-    "LICENSES/TACCAP_SLAVE_NOTICE.md": "3db04f7bf0e1e1415e9cdb388c50432177fbacbc3041ad8d5ef23b40c20114f6",
-    "LICENSES/TACCAP_SLAVE_ROBOSUITE.txt": "177978cbece0a4c454c2aaec5b3f145b39270814874c43109da9e829c39d9cba",
-    "LICENSES/XTAC_UMI_DESCRIPTION_MIT": "e377d313ab1da9536ccb3c97583680fbb8e818c3a89c9cd15724cc1f3fa92834"
+    "LICENSES/REBOT_B601_RS_CERN-OHL-W-2.0": "e258a9c6833bfd17fb90252df8c33e29d13fabc2768508248927824c17878db7"
+  },
+  "layout": "arm_and_c1_adapter_only",
+  "external_gripper": {
+    "repository": "https://github.com/XenseRobotics-AI/XTac-UMI-Description.git",
+    "branch": "main",
+    "manifest": "ros/taccap_description/asset.json",
+    "mount_configuration": "RebotB601RSConfig.gripper_parent_link/gripper_xyz/gripper_rpy"
   }
 }
