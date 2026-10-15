@@ -1,0 +1,25 @@
+{
+  "static": [
+    "drift_20261013_114441_identified_v1",
+    "train_rand50_s0"
+  ],
+  "holdout": [
+    "drift_20261013_115149_identified_val_v1",
+    "val_rand20_s100"
+  ],
+  "files": [
+    "../../../data/arm/drift_20261013_114441_identified_v1.csv@5",
+    "../../../data/arm/train_rand50_s0.csv",
+    "../../../data/arm/drift_20261013_115149_identified_val_v1.csv",
+    "../../../data/arm/val_rand20_s100.csv"
+  ],
+  "prior_weight": 0.1,
+  "torque_gain": [
+    1.0,
+    1.032,
+    1.08,
+    1.004,
+    1.0,
+    1.0
+  ]
+}
