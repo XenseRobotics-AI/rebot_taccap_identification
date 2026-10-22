@@ -65,6 +65,23 @@ def test_studio_pages_and_commands(app, tmp_path):
     window.close()
 
 
+def test_dm_studio_uses_serial_and_forwards_channel(app, tmp_path):
+    from rebot_taccap_identification.studio import app as studio
+
+    fields = {"channel": "/dev/ttyACM2", "results_dir": str(tmp_path / "results"),
+              "calibration_dir": str(tmp_path / "cal")}
+    window = studio.Studio("rebot_b601_dm", fields, with_3d=False)
+    assert window.dof == 6 and window.steps.count() == 6
+    assert not hasattr(window, "show_can_commands")
+    assert any("DM 串口" in label.text() for label in window.findChildren(studio.QLabel))
+    started = []
+    window.start = lambda *commands, **kwargs: started.extend(commands)
+    window.ping()
+    assert {"--robot.type=rebot_b601_dm", "--robot.channel=/dev/ttyACM2"} <= set(started[-1])
+    assert not any(arg.startswith("--robot.id=") for arg in started[-1])
+    window.close()
+
+
 def test_payload_drift_poses_load_into_payload_step(app, tmp_path):
     from rebot_taccap_identification.runtime.static_check import save_pose_file
     from rebot_taccap_identification.studio import app as studio

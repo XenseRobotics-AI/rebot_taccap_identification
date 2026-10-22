@@ -358,7 +358,12 @@ class Studio(QMainWindow):
         row.addWidget(self.connection, 1)
         column.addLayout(row)
         channel = getattr(cfg, "channel", None)
-        if channel:
+        if channel and getattr(cfg, "transport", None) == "serial":
+            column.addWidget(label(
+                f"DM 串口：{channel} · {cfg.dm_serial_baud} baud\n"
+                "通过 --robot.channel 指定当前机械臂的串口，如 /dev/ttyACM0 或 /dev/serial/by-path/…\n"
+                "此接口不需要配置 SocketCAN。"))
+        elif channel:
             command = QPlainTextEdit(
                 "sudo modprobe peak_usb          # PCAN-USB 驱动\n"
                 "ip -br link                     # 应能看到 " + channel + "\n"
@@ -878,7 +883,8 @@ class Studio(QMainWindow):
         if execute and out.exists() and QMessageBox.question(self, "覆盖", f"{out.name} 已存在，覆盖？") != QMessageBox.Yes:
             return
         save_pose_file(pose_file, self.payload_poses, source="rebot_taccap_identification studio (payload)")
-        args = ["--poses", str(pose_file), "--out", str(out), *self.common_args(), *self.payload_feedforward()]
+        args = ["--poses", str(pose_file), "--out", str(out), "--balance-load",
+                *self.common_args(), *self.payload_feedforward()]
         args += ["--with-tool"] if self.tool_from_urdf else \
             ["--tool-length", f"{self.tool_length.value():g}", "--tool-radius", f"{self.tool_radius.value():g}"]
 

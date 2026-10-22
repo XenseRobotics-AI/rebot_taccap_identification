@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rebot_taccap_identification"
 version = "0.1.0"
-description = "Mass and centre of mass identification of the reBot B601 (RobStride) arm and its payload, from static torques"
+description = "Mass and centre of mass identification of reBot B601 RS/DM arms and their payloads, from static torques"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -19,7 +19,7 @@ classifiers = [
 ]
 dependencies = [
   "numpy>=1.26", "scipy>=1.11.2",
-  "motorbridge>=0.5.6",                                   # RobStride motors over CAN
+  "motorbridge>=0.5.6",                                   # RS CAN / DM USB serial or CAN
   "PySide6>=6.5", "pyqtgraph>=0.13", "PyOpenGL>=3.1",     # workbench
 ]
 

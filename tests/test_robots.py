@@ -165,3 +165,47 @@ payload refused (nothing mounted) -> package."""
               "--out-urdf", str(payload)])
     assert main(["package", *cfg, "--model", str(urdf), "--template", str(boxed_arm(tmp_path))]) == 0
     assert any((results / "export").rglob("*.urdf"))
+
+
+def test_load_balance_raises_stiffness_only_where_damping_can_follow(tmp_path):
+    from rebot_taccap_identification.runtime.common import Dynamics, Limits
+    from rebot_taccap_identification.runtime.load_balance import LoadBalancedController
+
+    robot = make_robot("bench_test_arm", **arm_fields(tmp_path, kd_max=5, torque_limits=[20, 20, 6]))
+    kp, kd = np.array([30.0, 30, 8]), np.array([2.0, 5, 1])
+    ctrl = LoadBalancedController(robot, Dynamics.for_robot(robot), 100, kp, kd,
+                                  Limits(*robot.safety_window(), robot.torque_limits()))
+    # J2's kd is at its range: its gains stay. The others hold half their torque range within 8 deg.
+    np.testing.assert_allclose(ctrl.kp, [10 / np.radians(8), 30, 3 / np.radians(8)])
+    np.testing.assert_allclose(ctrl.kd / np.sqrt(ctrl.kp), kd / np.sqrt(kp))
+
+
+def test_static_check_holds_a_load_its_model_gets_wrong(tmp_path, monkeypatch, capsys):
+    """A gripper heavier than its CAD: the PD-only static check stops on tracking error, the
+    load-balanced one (default with --payload-cad) finishes and measures the true holding torque."""
+    from rebot_taccap_identification.gravity import gravity_torque
+    from rebot_taccap_identification.runtime import common
+    from rebot_taccap_identification.runtime.static_check import save_pose_file
+
+    monkeypatch.setattr(common.Ticker, "wait", lambda self: None)     # the arm advances one period per command
+    arms = []
+    monkeypatch.setattr(bench_arm.DynamicArm, "connect", lambda self: arms.append(self))
+    (tmp_path / "cad").mkdir()
+    cfg = robot_args("dynamic_test_arm", arm_fields(
+        tmp_path, urdf=str(boxed_arm(tmp_path / "cad", hand_mass=0.5)), kp=[30, 30, 8], kd=[2, 2, 1],
+        torque_limits=[20, 20, 6], move_speed=1.0, load_mass=0.9, load_com=[0.35, 0, 0]))
+    poses = tmp_path / "poses.json"
+    save_pose_file(poses, np.radians([[20, 30, -60], [-30, -20, 40], [10, 40, 70]]))
+    run = ["static", *cfg, "--poses", str(poses), "--settle", "0.3", "--hold", "0.3", "--payload-cad", "--execute"]
+
+    main([*run, "--no-balance-load", "--out", str(tmp_path / "pd.csv")])
+    assert "J3 跟踪误差" in capsys.readouterr().out
+
+    main([*run, "--out", str(tmp_path / "balanced.csv")])
+    out = capsys.readouterr().out
+    assert "[负载平衡]" in out and "跟踪误差" not in out and "未收敛" not in out
+    data = np.loadtxt(tmp_path / "balanced.csv", delimiter=",", skiprows=1)
+    arm = arms[-1]
+    truth = gravity_torque(arm.model, np.radians(data[:, :3]), arm.truth)
+    assert np.abs(data[:, 6:9] - truth).max() > 1.0                   # the CAD feedforward is far off
+    np.testing.assert_allclose(data[:, 3:6], truth, atol=arm.config.friction)

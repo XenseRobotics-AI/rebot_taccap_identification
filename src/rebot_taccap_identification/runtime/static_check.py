@@ -29,6 +29,7 @@ from .common import (
     Controller, Dynamics, SafetyStop, add_common_args, check_clearance, describe_clearance, make_controller,
     open_robot,
 )
+from .load_balance import LoadBalancedController
 
 
 def structural_reference(robot: Robot) -> np.ndarray:
@@ -236,15 +237,27 @@ def approach_offsets(pose: np.ndarray, delta: float, lower: np.ndarray, upper: n
 
 def measure(ctrl: Controller, pose: np.ndarray, delta: float, args) -> dict:
     samples = {}
+    balanced = isinstance(ctrl, LoadBalancedController)
     offsets = approach_offsets(pose, delta, *ctrl.arm.safety_window())
     for side, sign in (("below", -1.0), ("above", 1.0)):
         ctrl.move_to(pose + sign * offsets, args.move_speed)
         ctrl.move_to(pose, args.move_speed / 2)
         ctrl.hold(pose, args.settle)
-        rows = []
-        ctrl.hold(pose, args.hold, record=rows.append)
-        # What the motor was actually told: feedforward (after the gain) + kp*error + kd*(0 - dq).
-        command = [ctrl.dyn.gravity(pose)[0] / ctrl.torque_gain + ctrl.kp * (pose - r.q) - ctrl.kd * r.dq for r in rows]
+        if balanced:
+            ctrl.settle(pose)
+            ctrl.frozen = True                    # constant command while the samples are averaged
+        rows, command = [], []
+
+        def record(state):
+            rows.append(state)
+            # What the motor was actually told: feedforward (after the gain) + kp*error + kd*(0 - dq).
+            command.append(ctrl.commanded_torque(state))
+
+        try:
+            ctrl.hold(pose, args.hold, record=record)
+        finally:
+            if balanced:
+                ctrl.frozen = False
         samples[side] = (np.mean([r.q for r in rows], axis=0), np.mean([r.tau for r in rows], axis=0),
                          np.mean(command, axis=0))
     q = 0.5 * (samples["below"][0] + samples["above"][0])
@@ -296,6 +309,8 @@ def main(argv=None) -> None:
     parser.add_argument("--out", help="输出 CSV（默认 <结果目录>/static/check.csv）")
     parser.add_argument("--save-calibration", action="store_true",
                         help="把测得的力矩增益写入该机器人的标定文件（~/.cache/rebot_taccap_identification/calibration/robots/<类型>/<id>.json）")
+    parser.add_argument("--balance-load", action=argparse.BooleanOptionalAction, default=None,
+                        help="未知负载静态采集：受限积分建立平衡，保持误差/力矩保护；--payload-cad 或 --with-tool 时默认开启")
     args = parser.parse_args(argv)
 
     robot, dynamics = open_robot(args)
@@ -329,7 +344,11 @@ def main(argv=None) -> None:
         return
 
     out = Path(args.out) if args.out else Results.for_robot(robot).static("check")
-    ctrl = make_controller(robot, dynamics, args, check_window=False)
+    balance = args.balance_load
+    if balance is None:                           # a mounted load whose model is not known yet
+        balance = args.payload_cad or args.with_tool or args.tool_length > 0
+    ctrl = make_controller(robot, dynamics, args, check_window=False,
+                           controller_type=LoadBalancedController if balance else Controller)
     results = []
     try:
         robot.connect()

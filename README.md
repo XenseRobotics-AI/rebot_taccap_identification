@@ -1,6 +1,8 @@
 # rebot_taccap_identification
 
-用**静态力矩**辨识 reBot B601 灵足版（RobStride 电机）机械臂各连杆的**质量和质心**，以及末端负载（C1 转接件 + TacCap G1 夹爪）的质量和质心，用于重力补偿。
+用**静态力矩**辨识 reBot B601 灵足版（RS / RobStride）和达妙版（DM）机械臂各连杆的**质量和质心**，以及末端负载（C1 转接件 + TacCap G1 夹爪）的质量和质心，用于重力补偿。
+
+DM 使用 `--robot.type=rebot_b601_dm`，支持 USB 串口及 SocketCAN，按单臂独立辨识。详见 [DM 接线、模型和完整辨识流程](src/rebot_taccap_identification/robots/rebot_b601_dm/README.md)。静态辨识不包含转动惯量和速度摩擦的动态辨识。
 
 - 数据来自几十个静止位姿的保持力矩。
 - 辨识结果写成 URDF（质量、质心替换为辨识值，关于质心的惯量保持原值），可以导出带网格的完整 URDF 包。
@@ -40,7 +42,7 @@ wheel 不包含第三方仓库；在源码目录之外使用 wheel 时，通过 
 
 需要 Python ≥ 3.12，Linux（安全停止通过 SIGINT 实现）。
 
-CAN 口（PCAN-USB）：
+RS 的 CAN 口（PCAN-USB；DM 默认 USB 串口不需要此步骤）：
 
 ```bash
 #套件里是 PCAN-USB，通常应该直接出现 can0 或 can1
@@ -60,9 +62,11 @@ sudo ip link set can0 up
 rebot_taccap_identification studio
 # 其它 CAN 口
 rebot_taccap_identification studio --robot.channel=can1
+# DM：指定当前机械臂的串口
+rebot_taccap_identification studio --robot.type=rebot_b601_dm --robot.channel=/dev/ttyACM0
 ```
 
-本项目只随附 reBot B601-RS 机械臂和 C1 转接件的 URDF、网格，位于 `src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/`（来源见 [sources.json](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/sources.json)，许可见 [LICENSES/](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/LICENSES/)）。夹爪从 `third_party/XTac-UMI-Description` 的资产清单读取裸从夹爪 URDF；运行时与机械臂、C1 装配成带相对网格路径的资源快照，夹爪模型和网格的源文件仍由第三方仓库提供。`link6` 是第六轴输出面的虚拟坐标系，没有质量；C1 和夹爪挂在它下面，整体参与负载辨识。电机配置、默认增益、软限位见 [src/rebot_taccap_identification/robots/rebot_b601_rs/README.md](src/rebot_taccap_identification/robots/rebot_b601_rs/README.md)。
+RS 机械臂和 C1 转接件的 URDF、网格位于 `src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/`（来源见 [sources.json](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/sources.json)，许可见 [LICENSES/](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/LICENSES/)）。夹爪从 `third_party/XTac-UMI-Description` 的资产清单读取裸从夹爪 URDF；运行时与机械臂、C1 装配成带相对网格路径的资源快照，夹爪模型和网格的源文件仍由第三方仓库提供。`link6` 是第六轴输出面的虚拟坐标系，没有质量；C1 和夹爪挂在它下面，整体参与负载辨识。电机配置、默认增益、软限位见 [src/rebot_taccap_identification/robots/rebot_b601_rs/README.md](src/rebot_taccap_identification/robots/rebot_b601_rs/README.md)。
 
 默认机械臂路径使用 `package://rebot_taccap_identification/...` 资源标识，外部仓库可以使用项目相对路径。运行时组合模型会生成含相对网格引用的资源快照；辨识模型同样携带 `meshes/` 和许可文件，移动整个模型目录仍可加载。新结果 JSON 的文件引用相对于 JSON 所在目录解析。
 
@@ -131,7 +135,7 @@ rebot_taccap_identification studio --robot.channel=can1
 2. 在“负载训练”（40 个）和“负载验证”（20 个）里分别**生成**，先预检再执行。碰撞检查包含夹爪外形（3D 中橙色），J1–J6 全部参与采样。
 3. 数据存在负载自己的数据包 `<结果目录>/gripper/` 里，与本体数据分开。点**辨识负载**。
 
-采负载数据时的重力前馈：所选本体版本已有辨识出的负载模型时用它，否则用本体 + URDF 中的 CAD 负载（命令行 `--payload-cad`）。只用本体模型时负载全靠 kp 撑住，伸展姿态下 J2 会下沉好几度，超过跟踪误差上限，也可能碰到桌面。先采一组、辨识出负载，之后再采的数据就用辨识的负载做前馈。
+采负载数据时的重力前馈：所选本体版本已有辨识出的负载模型时用它，否则用本体 + URDF 中的 CAD 负载（命令行 `--payload-cad`）。前馈和实物的差由**负载平衡**补上（工作台采负载数据时开启；命令行加 `--payload-cad`、`--with-tool` 时默认开启，`--no-balance-load` 关闭）：位置误差的受限积分在每个位姿建立平衡力矩，到位静止后冻结，再对电机反馈力矩取平均，所以换夹爪、CAD 不准也不需要先有准确的负载模型。积分最多补力矩上限的一半；kd 还能同比加大的关节同时提高 kp，让这么大的误差在积分跟上之前也不超过跟踪误差上限（阻尼比不变，kd 已到量程的关节不改）。跟踪误差、力矩、温度保护不变。
 
 碰撞检查包含每个位姿两侧 ±`--delta`（默认 5°）的接近动作；桌面高度（第 0 步，`--table-z`）要按实际填，安全距离 `--clearance` 默认 10 mm。
 4. 结果在 `gripper/models/<本体版本>/`，第 3 步的模型列表里显示为“辨识 v3+gripper”，可以直接做重力补偿检验。用它做补偿时，漂移分析的补点会存进 `gripper/`，按钮变成“载入建议位姿 → 第 4 步负载静态（gripper）”。

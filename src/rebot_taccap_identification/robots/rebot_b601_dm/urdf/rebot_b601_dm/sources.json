@@ -1,0 +1,81 @@
+{
+  "robot": "rebot_b601_dm",
+  "layout": "arm_and_c1_adapter_only",
+  "repositories": {
+    "reBot-Isaacsim": {
+      "url": "https://github.com/hopcan/reBot-Isaacsim.git",
+      "commit": "1958511342dab181b94a2b7c068c77e54eb85d3a",
+      "clean": true
+    },
+    "reBotArm_control_py": {
+      "url": "git@github.com:Seeed-Projects/reBotArm_control_py.git",
+      "commit": "6415d43130d1e143c70dc106096a857ac5556f81",
+      "clean": true
+    }
+  },
+  "inputs": {
+    "arm": {
+      "path": "urdf/reBot_B601_DM/urdf/reBot_B601_DM.urdf",
+      "sha256": "c66e82962ee1c7518709f67ab816dafa5f2b1ee7849985d1a361ebfce9efbc33"
+    },
+    "arm_inertials": {
+      "path": "urdf/DM/urdf/ReBot_Arm_DM.urdf",
+      "sha256": "cd3054edec30b70a3afb2e97eb288ad4943a31c9746f8775703733b64ac0c3cf"
+    },
+    "adapter": {
+      "path": "src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/urdf/rebot_b601_rs.urdf",
+      "sha256": "5319bc11381d2c9e23080f90e14f4fcf2768c8988f748aa462d77837074c4053"
+    },
+    "adapter_provenance": {
+      "repository": "xense-description",
+      "path": "assets/mounts/tool_adapters/seeed_rebot_b601_rs_to_taccap_slave/urdf/c1_rs_taccap_adapter.urdf",
+      "sha256": "683efcd68af8e8ee1950acc06d7135562ecc958ba6a0718f88f04704c8b10c1b"
+    }
+  },
+  "changes": [
+    "Keep simulation mesh geometry and joint1..5 geometry unchanged",
+    "Replace base_link and link1..5 inertials with nominal control-repository DM parameters",
+    "Remove stock flange/gripper; link6 is massless bare motor output",
+    "joint6 origin x=0.028008 (stock 0.023692 + 0.004316 m), as libpyrebot DM_Taccap",
+    "Attach existing C1 CAD at link6, xyz=0, rpy=[pi/2,0,pi/2]; no identified RS masses"
+  ],
+  "meshes": {
+    "meshes/c1_adapter/c1_rs_taccap_adapter.stl": "8bc8609b83278c1440dbb21cc476fb1f2ea5d38fbf3e9bb413ace2187fbff4de",
+    "meshes/rebot_b601_dm/base_link.STL": "320bf6e8492ed74be96d4ab74553b1f5356e617770e7fb38b6f3819d6c5702b0",
+    "meshes/rebot_b601_dm/cnc0.STL": "c67134041323dd116349215d8b8ab1766543af33c7c9deabf3c3d4a6339a0ab8",
+    "meshes/rebot_b601_dm/cnc1.STL": "9130ba939bbfc1a612452e33571a579fc2f15c70da14692c68560af4cdbe8636",
+    "meshes/rebot_b601_dm/cnc2.STL": "54dd317dbc312fcc4fff1cb7656fa8c08ec54df61fae1b92a6de66c677a87327",
+    "meshes/rebot_b601_dm/cnc3.STL": "809e6765975c8d69f6b5d4dd8a5b9566a6b7c140b8836f7466f1c62a532993b1",
+    "meshes/rebot_b601_dm/cnc4.STL": "43b1c0eb2b77d49b3de7987bf528416fa86fc22461b5992edd179530c7701f8e",
+    "meshes/rebot_b601_dm/cnc5.STL": "a38c1bd9f6485ed3dcf6b04f83e9d3147291e8caf4858c93c80aef6ef7876a56",
+    "meshes/rebot_b601_dm/link1.STL": "28273acfe3c9cd87fdd77eec712ed5cdcb601d0e53bf87fe542e5c6b9db0ff80",
+    "meshes/rebot_b601_dm/link2.STL": "c403503e2ea571b6c97c3e8d08a37ed7b4fe842ae402d07e992784e2085c85f7",
+    "meshes/rebot_b601_dm/link3.STL": "d63b33ce13180105c601942d4e15d034fa6dcaf9a6280a76d51c84dca4f627f2",
+    "meshes/rebot_b601_dm/link4.STL": "8f2de8dadddab5c16d4f61c86336188c4cd6a9dd9d4b2dd58fb9d19b1ee15ad0",
+    "meshes/rebot_b601_dm/link5.STL": "37f97301bdb26967eab973b9930489a11d8bf8d67630fe43346ed451ddee155f",
+    "meshes/rebot_b601_dm/motor2.STL": "6217b41b37f6815fddfb4d16c93eeb794651798c952ba69caec1e4bece3b2c2b",
+    "meshes/rebot_b601_dm/motor3.STL": "43549a4480f78f2bdf1afa865f0947da5bdef3e1c0dd2f16a4c855fb2001fb22",
+    "meshes/rebot_b601_dm/motor4.STL": "b03accb3317e1e77de3681f920b4422d299631c2c601cdef5da7e545a2ea2fc4",
+    "meshes/rebot_b601_dm/motor5.STL": "610675932ded38770b8fa8a5f5b2b088b6921d9b50a1b9f009cf34c580bc15d8",
+    "meshes/rebot_b601_dm/pla0_black.STL": "65f731907ba5d3b8407b9e8a1b4ed616f4b92bc2824ecfe20ee3d411d3035484",
+    "meshes/rebot_b601_dm/pla1_black.STL": "c4732930a6947f781639cfdaf1254469144ad525fd3a3a7a59d798af342a4f1a",
+    "meshes/rebot_b601_dm/pla2_black.STL": "d32e33f69234ec45637e9e8c700e552f02097624b352c72387cf9d67be62d221",
+    "meshes/rebot_b601_dm/pla2_green.STL": "30dce885227be02e322cdde305d7d88e97b0000998323b29096d2375a7fc752f",
+    "meshes/rebot_b601_dm/pla3_black.STL": "fe1e43d1b1604441b679571d8ac79e7da5ab50b20bc8e31bac49ab51718d16ce",
+    "meshes/rebot_b601_dm/pla3_green.STL": "a717ad7d2f1eb783eeefe6b33fd37825c9d2938a3892754c3c9b47389862b19f",
+    "meshes/rebot_b601_dm/pla4_black.STL": "c96ff95ab3485c917e37e48bfa9f4e0019d350bb9606af90fa3506f6f7ff8405",
+    "meshes/rebot_b601_dm/pla5_black.STL": "d09085a4bf0316cd9cfcc7db6d1bd0554125f5525ce93db3ddc3a249e0f93262",
+    "meshes/rebot_b601_dm/pla5_white.STL": "b3128e65c3acd00fd97ad7517a62b5ef05cc567d58ec6da48e62f1fe2e4bf293"
+  },
+  "licenses": {
+    "LICENSES/C1_ADAPTER_NOTICE.md": "1ca00a0ec72b237343dc3d307db8a774f6269a6011308a32db8f1e63e8612663",
+    "LICENSES/DM_ARM_INERTIALS_NOTICE.md": "f2163443c79c6eb298a44398361072cc8efeff32a296e3f487c779eae2c85cb4",
+    "LICENSES/REBOT_ISAACSIM_MIT": "3c46ce472bd9cd9c419bae897f4ced4ae73691c41fdd8eafa8a4b673725664e8"
+  },
+  "urdf_sha256": "631da8f074efa6cd222825eb67d27fb548a2c91d47f49ad2cbf8f7fc5cb51520",
+  "external_gripper": {
+    "repository": "https://github.com/XenseRobotics-AI/XTac-UMI-Description.git",
+    "manifest": "ros/taccap_description/asset.json",
+    "mount_configuration": "RebotB601DMConfig.gripper_parent_link/gripper_xyz/gripper_rpy"
+  }
+}

@@ -132,7 +132,7 @@ def robot_args(robot_type: str, fields: dict[str, Any]) -> list[str]:
 
 
 ROBOT_HELP = """机器人：
-  --robot.type=TYPE        机器人类型，如 rebot_b601_rs（rebot_taccap_identification list 列出全部）
+  --robot.type=TYPE        rebot_b601_rs / rebot_b601_dm（rebot_taccap_identification list 列出全部）
   --robot.id=ID            同型号多台实机时区分（标定文件、结果目录）
   --robot.<字段>=<值>      覆盖该类型配置的任意字段，如 --robot.channel=can1 --robot.kp=[50,50,50,30,50,50]
 """

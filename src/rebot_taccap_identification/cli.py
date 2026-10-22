@@ -112,7 +112,10 @@ def cmd_identify(args: argparse.Namespace) -> int:
     write_offsets(offsets_path(out), model.joint_names, result.offset, source=str(out.name))
     summary = {"version": version, "urdf": out.name, "mass_kg": result.mass.tolist(), "com_m": result.com.tolist(),
                "offset_nm": result.offset.tolist(), "rmse_nm": result.rmse.tolist(), "rank": result.rank,
-               "samples": result.n_samples, "notes": result.notes}
+               "samples": result.n_samples, "notes": result.notes,
+               "robot_type": robot.config.type, "robot_id": robot.id, "joint_names": model.joint_names,
+               "gravity_m_s2": list(robot.config.gravity), "identification_kind": "static_gravity",
+               "inertia_source": "CAD (not identified from static measurements)"}
     results.result(version).write_text(json.dumps(summary, indent=2, ensure_ascii=False))
     names = lambda specs: [Path(static_spec(spec)[0]).stem for spec in specs]
     results.save_inputs(version, static=names(args.static), holdout=names(args.val), files=args.static + args.val,
@@ -172,7 +175,9 @@ def cmd_payload(args: argparse.Namespace) -> int:
             "inertial_10": result.parameters.tolist(), "inertia_source": result.inertia_source,
             "arm_urdf": relative_reference(arm_snapshot, out.parent), "rmse_arm": result.rmse_arm.tolist(),
             "rmse_with_payload": result.rmse_payload.tolist(), "offset_nm": result.offset.tolist(),
-            "torque_gain": gain.tolist(), "notes": result.notes}
+            "torque_gain": gain.tolist(), "notes": result.notes,
+            "robot_type": robot.config.type, "robot_id": robot.id, "joint_names": model.joint_names,
+            "gravity_m_s2": list(robot.config.gravity), "identification_kind": "static_payload"}
     out.with_name("payload.json").write_text(json.dumps(info, indent=2, ensure_ascii=False))
     print(f"已导出 {out}（本体 + 负载，负载并入 {link}）和 payload.json")
     if args.val:

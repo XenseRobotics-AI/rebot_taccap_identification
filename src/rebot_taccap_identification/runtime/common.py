@@ -221,6 +221,8 @@ class Controller:
         self.ticker = Ticker(rate)
         self.tmax = limits.torque
         self.q_cmd = None
+        self.dq_cmd = np.zeros(self.dof)
+        self.kp_cmd, self.kd_cmd = self.kp.copy(), self.kd.copy()
         self.tau_cmd = np.zeros(self.dof)
         self.stream = False          # --stream: machine-readable "@state {...}" lines for the GUI
         self._last_stream = 0.0
@@ -230,7 +232,14 @@ class Controller:
         kp, kd = self.arm.clip_gains(self.kp if kp is None else kp, self.kd if kd is None else kd)
         self.arm.command(q, dq, kp, kd, tau)
         self.q_cmd = np.asarray(q, dtype=float)
+        self.dq_cmd = np.asarray(dq, dtype=float)
+        self.kp_cmd, self.kd_cmd = kp.copy(), kd.copy()
         self.tau_cmd = tau
+
+    def commanded_torque(self, state: State) -> np.ndarray:
+        """Total MIT command at this feedback pose, including the last sent feedforward."""
+        return (self.tau_cmd + self.kp_cmd * (self.q_cmd - state.q)
+                + self.kd_cmd * (self.dq_cmd - state.dq))
 
     def state(self) -> State | None:
         state = self.arm.read()
@@ -383,11 +392,12 @@ def open_robot(args) -> tuple[Robot, Dynamics]:
     return robot, dynamics
 
 
-def make_controller(robot: Robot, dynamics: Dynamics, args, check_window: bool = True) -> Controller:
+def make_controller(robot: Robot, dynamics: Dynamics, args, check_window: bool = True,
+                    controller_type=Controller) -> Controller:
     lower, upper = robot.safety_window()
     limits = Limits(lower, upper, robot.torque_limits(), max_tracking=np.radians(args.max_track_err),
                     torque_ratio=args.torque_ratio, max_temperature=args.max_temp, check_window=check_window)
-    ctrl = Controller(robot, dynamics, args.rate, args.kp, args.kd,
-                      limits, args.torque_gain)
+    ctrl = controller_type(robot, dynamics, args.rate, args.kp, args.kd,
+                           limits, args.torque_gain)
     ctrl.stream = args.stream
     return ctrl

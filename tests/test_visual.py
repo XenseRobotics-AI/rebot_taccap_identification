@@ -12,14 +12,15 @@ def box(size, xyz):
     return f'<visual><origin xyz="{xyz}"/><geometry><box size="{size}"/></geometry></visual>'
 
 
-def boxed_arm(tmp_path):
-    """3-DOF arm with box visuals and a gripper below ``l3`` (j3 swings l3 in the vertical plane)."""
+def boxed_arm(tmp_path, hand_mass: float = 0.0):
+    """3-DOF arm with box visuals and a gripper below ``l3`` (j3 swings l3 in the vertical plane);
+    ``hand_mass`` gives the gripper a CAD mass."""
     return write_robot(tmp_path, f'''
       <link name="base">{box("0.2 0.2 0.02", "0 0 0.01")}</link>
       <link name="l1">{inertial(1.5, "0 0 0.1")}{box("0.06 0.06 0.2", "0 0 0.1")}</link>
       <link name="l2">{inertial(1.2, "0.2 0 0")}{box("0.4 0.05 0.05", "0.2 0 0")}</link>
       <link name="l3">{inertial(0.6, "0.15 0 0")}{box("0.3 0.04 0.04", "0.15 0 0")}</link>
-      <link name="hand">{box("0.05 0.05 0.05", "0 0 0")}</link><link name="finger">{box("0.01 0.01 0.04", "0 0 0")}</link>
+      <link name="hand">{inertial(hand_mass, "0 0 0") if hand_mass else ""}{box("0.05 0.05 0.05", "0 0 0")}</link><link name="finger">{box("0.01 0.01 0.04", "0 0 0")}</link>
       <joint name="j1" type="revolute"><parent link="base"/><child link="l1"/><origin xyz="0 0 0.02"/>
         <axis xyz="0 0 1"/><limit lower="-2" upper="2" effort="30" velocity="3"/></joint>
       <joint name="j2" type="revolute"><parent link="l1"/><child link="l2"/><origin xyz="0 0 0.2" rpy="{np.pi / 2} 0 0"/>
