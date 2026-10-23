@@ -14,9 +14,15 @@ identification motions, not contact or teleoperation.
 
 from __future__ import annotations
 
+from collections import deque
+
 import numpy as np
 
 from .common import Controller, SafetyStop
+
+
+class NotSettled(SafetyStop):
+    """The arm did not come to rest at a pose: that pose is skipped, the run goes on."""
 
 
 class LoadBalancedController(Controller):
@@ -36,6 +42,10 @@ class LoadBalancedController(Controller):
         self.correction_slew = .5 * self.tmax       # N·m/s
         self.integral_gain = 2.0 * self.kp          # N·m/rad/s: integral time constant 0.5 s
         self.frozen = False                         # True while static samples are averaged
+        # Settled: within ``still`` of travel over the window and ``close`` to the pose. Travel, not
+        # sample-to-sample speed: DM feedback counts in 0.022° steps, one step per 10 ms is 2.2°/s.
+        self.still = np.radians(0.15)
+        self.close = min(np.radians(2.0), self.limits.max_tracking / 3)
 
     def send(self, q, dq, tau, kp=None, kd=None) -> None:
         q, dq, tau = (np.asarray(v, dtype=float) for v in (q, dq, tau))
@@ -54,6 +64,10 @@ class LoadBalancedController(Controller):
         # so the division is performed exactly once.
         super().send(q, dq, tau + self.correction * self.torque_gain, kp=kp, kd=kd)
 
+    def stop_report(self) -> list[str]:
+        lines = super().stop_report()
+        return lines + [f"[stop] 其中积分补偿 {np.round(self.correction, 2).tolist()} N·m"] if lines else lines
+
     def engage(self, ramp: float = 0.5) -> np.ndarray:
         print("[负载平衡] 积分补偿模型未包含的负载力矩，不依赖夹爪质量/质心", flush=True)
         print(f"[负载平衡] kp={np.round(self.kp, 1).tolist()} kd={np.round(self.kd, 2).tolist()}；"
@@ -65,24 +79,34 @@ class LoadBalancedController(Controller):
         self.settle(q_hold)
         return q_hold
 
-    def settle(self, q, timeout: float = 6.0) -> None:
-        """Hold ``q`` until the arm is still and close to it, before static data is accepted."""
+    def settle(self, q, timeout: float = 6.0, window: float = 0.4) -> None:
+        """Hold ``q`` until the arm has stayed still close to it for ``window`` seconds."""
         q = np.asarray(q, dtype=float)
         tau, zero = self.dyn.gravity(q)[0], np.zeros(self.dof)
-        close = min(np.radians(1.0), self.limits.max_tracking / 3)
-        stable, previous = 0.0, None
+        recent = deque(maxlen=max(2, int(round(window * self.rate))))
         for _ in range(max(1, int(timeout * self.rate))):
             state = self.state()
             self.monitor.check(state, q)
             if state is None:
-                stable, previous = 0.0, None
+                recent.clear()
             else:
-                # Position travel, not the noisy firmware velocity, tells whether the arm moves.
-                quiet = previous is not None and np.max(np.abs(state.q - previous)) * self.rate < np.radians(3)
-                stable = stable + 1 / self.rate if quiet and np.max(np.abs(q - state.q)) < close else 0.0
-                previous = state.q.copy()
+                recent.append(state.q)
             self.send(q, zero, tau)
             self.ticker.wait()
-            if stable >= .4:
+            if len(recent) == recent.maxlen and not self.unsettled(q, np.array(recent)):
                 return
-        raise SafetyStop("负载平衡未收敛，停止采集；检查负载是否超出力矩能力、机械干涉或反馈异常")
+        raise NotSettled(f"{timeout:g} s 内未静止：{self.unsettled(q, np.array(recent), window)}")
+
+    def unsettled(self, q: np.ndarray, recent: np.ndarray, window: float = 0.4) -> str:
+        """Why the positions ``recent`` are not a settled hold of ``q``, or ""."""
+        if not len(recent):
+            return "收不到电机反馈"
+        travel = np.ptp(recent, axis=0)
+        error = recent.mean(axis=0) - q
+        reasons = [f"J{j + 1} {window:g} s 内移动 {np.degrees(travel[j]):.2f}°"
+                   for j in np.flatnonzero(travel > self.still)]
+        reasons += [f"J{j + 1} 偏离目标 {np.degrees(error[j]):+.1f}°"
+                    for j in np.flatnonzero(np.abs(error) > self.close)]
+        if not reasons:
+            return ""
+        return "，".join(reasons) + f"（积分补偿 {np.round(self.correction, 2).tolist()} N·m）"

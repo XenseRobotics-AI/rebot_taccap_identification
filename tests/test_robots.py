@@ -199,7 +199,8 @@ def test_static_check_holds_a_load_its_model_gets_wrong(tmp_path, monkeypatch, c
     run = ["static", *cfg, "--poses", str(poses), "--settle", "0.3", "--hold", "0.3", "--payload-cad", "--execute"]
 
     main([*run, "--no-balance-load", "--out", str(tmp_path / "pd.csv")])
-    assert "J3 跟踪误差" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "J3 跟踪误差" in out and "[stop] 阶段：[1/3]" in out and "实测力矩" in out
 
     main([*run, "--out", str(tmp_path / "balanced.csv")])
     out = capsys.readouterr().out
@@ -209,3 +210,73 @@ def test_static_check_holds_a_load_its_model_gets_wrong(tmp_path, monkeypatch, c
     truth = gravity_torque(arm.model, np.radians(data[:, :3]), arm.truth)
     assert np.abs(data[:, 6:9] - truth).max() > 1.0                   # the CAD feedforward is far off
     np.testing.assert_allclose(data[:, 3:6], truth, atol=arm.config.friction)
+
+
+def test_static_check_learns_an_unknown_load_and_skips_poses_it_makes_too_heavy(tmp_path, monkeypatch, capsys):
+    """No model of the load at all: the plan keeps every pose, the run learns the load from the
+    first two and skips the third, which the load makes too heavy for the torque margin."""
+    from rebot_taccap_identification.runtime import common
+    from rebot_taccap_identification.runtime.static_check import save_pose_file
+
+    monkeypatch.setattr(common.Ticker, "wait", lambda self: None)
+    cfg = robot_args("dynamic_test_arm", arm_fields(tmp_path, kp=[30, 30, 8], kd=[2, 2, 1], torque_limits=[20, 20, 6],
+                                                    move_speed=1.0, load_mass=0.9, load_com=[0.35, 0, 0]))
+    poses = tmp_path / "poses.json"
+    save_pose_file(poses, np.radians([[0, 20, 30], [0, -30, -20], [0, 10, -10]]))   # J3 needs 43 %, 43 %, 66 %
+    main(["static", *cfg, "--poses", str(poses), "--settle", "0.3", "--hold", "0.3", "--balance-load",
+          "--max-hold", "0.55", "--out", str(tmp_path / "out.csv"), "--execute"])
+    out = capsys.readouterr().out
+    assert "：3 个位姿" in out and "[stop] 阶段" not in out
+    assert "跳过 [3/3] [0, 10, -10]°：预计 J3 保持力矩" in out
+    assert len(np.loadtxt(tmp_path / "out.csv", delimiter=",", skiprows=1)) == 2
+
+
+def test_static_check_rejects_contact_and_skips_a_pose_that_never_settles(tmp_path, monkeypatch, capsys):
+    """A pose resting on something is measured but kept out of the data; a pose where the arm keeps
+    moving is skipped. Both leave a feedback trace; the run goes on with the other poses."""
+    from rebot_taccap_identification.runtime import common
+    from rebot_taccap_identification.runtime.static_check import save_pose_file
+
+    monkeypatch.setattr(common.Ticker, "wait", lambda self: None)
+    poses = np.radians([[10, 40, 70], [0, -50, -20], [20, 30, -60], [-30, -20, 40], [0, 20, 30], [10, -40, 20]])
+    contact, shaking, ticks = poses[3], poses[4], [0]
+    gravity = bench_arm.gravity_torque
+
+    def world(model, q, theta):                  # the arm's load, plus what the test puts in its way
+        tau = gravity(model, q, theta)
+        ticks[0] += 1
+        if np.abs(q[0] - contact).max() < np.radians(8):
+            tau = tau + [2.5, -2.0, -1.0]        # resting on something that also pushes sideways
+        if np.abs(q[0] - shaking).max() < np.radians(8):
+            tau = tau + [0.0, 3.0 * np.sin(ticks[0] / 4), 0.0]
+        return tau
+
+    monkeypatch.setattr(bench_arm, "gravity_torque", world)
+    cfg = robot_args("dynamic_test_arm", arm_fields(tmp_path, kp=[30, 30, 8], kd=[2, 2, 1], torque_limits=[20, 20, 6],
+                                                    move_speed=1.0))
+    save_pose_file(tmp_path / "poses.json", poses)
+    out = tmp_path / "static" / "run.csv"
+    main(["static", *cfg, "--poses", str(tmp_path / "poses.json"), "--settle", "0.3", "--hold", "0.3",
+          "--balance-load", "--out", str(out), "--execute"])
+    log = capsys.readouterr().out
+    assert "⚠ [4/6]" in log and "J1 实测力矩比预测大" in log and "不计入数据" in log
+    assert "⚠ [5/6]" in log and "未静止：J2" in log and "[stop] 阶段" not in log
+    assert len(np.loadtxt(out, delimiter=",", skiprows=1)) == 4
+    diagnostics = tmp_path / "static" / "diagnostics"
+    assert len(np.loadtxt(diagnostics / "run_rejected.csv", delimiter=",", skiprows=1, ndmin=2)) == 1
+    assert (diagnostics / "run_p4.csv").is_file() and (diagnostics / "run_p5.csv").is_file()
+    assert sorted(p.name for p in (tmp_path / "static").glob("*.csv")) == ["run.csv"]
+
+
+def test_settling_ignores_feedback_quantisation_but_not_drift(tmp_path):
+    from rebot_taccap_identification.runtime.common import Dynamics, Limits
+    from rebot_taccap_identification.runtime.load_balance import LoadBalancedController
+
+    robot = make_robot("bench_test_arm", **arm_fields(tmp_path, torque_limits=20))
+    ctrl = LoadBalancedController(robot, Dynamics.for_robot(robot), 100, 30, 2, Limits(*robot.safety_window(), robot.torque_limits()))
+    q, count = np.zeros(3), 25 / 65535                   # one DM position count [rad]
+    dither = q + count * np.random.default_rng(0).integers(-1, 2, size=(40, 3))
+    assert ctrl.unsettled(q, dither) == ""                # 2 counts in 10 ms is 4.4 °/s, yet still
+    drift = q + np.linspace(0, np.radians(0.4), 40)[:, None] * [0, 1, 0]
+    assert "J2 0.4 s 内移动 0.40°" in ctrl.unsettled(q, drift)
+    assert "J3 偏离目标 +3.0°" in ctrl.unsettled(q, np.tile(np.radians([0, 0, 3]), (40, 1)))

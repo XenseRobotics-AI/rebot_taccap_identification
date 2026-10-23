@@ -23,13 +23,14 @@ from pathlib import Path
 
 import numpy as np
 
+from ..gravity import PER_LINK, gravity_regressor
 from ..results import Results
 from ..robots import Robot
 from .common import (
     Controller, Dynamics, SafetyStop, add_common_args, check_clearance, describe_clearance, make_controller,
     open_robot,
 )
-from .load_balance import LoadBalancedController
+from .load_balance import LoadBalancedController, NotSettled
 
 
 def structural_reference(robot: Robot) -> np.ndarray:
@@ -89,7 +90,7 @@ def parse_focus(specs, dof: int) -> list[tuple[int, float, float, float]]:
 
 def generate_poses(robot: Robot, dynamics: Dynamics, n: int, seed: int = 0, rest: np.ndarray | None = None,
                    table_z: float = 0.0, clearance: float = 0.01, focus=(), sample=None,
-                   delta: float = np.radians(5.0)) -> np.ndarray:
+                   delta: float = np.radians(5.0), max_hold: float = 0.6) -> np.ndarray:
     """``n`` collision-free static poses covering the safety window, ordered as a tour from ``rest``.
 
     Joints come from ``default_sample`` (``sample``, one bool per joint, overrides it),
@@ -97,7 +98,8 @@ def generate_poses(robot: Robot, dynamics: Dynamics, n: int, seed: int = 0, rest
     poses. Each ``focus`` entry ``(joint, lo, hi, fraction)`` places that fraction of
     the poses with the joint in [lo, hi] (e.g. where the arm usually rests, or where
     a model was inaccurate). A candidate is dropped when it, or one of its two approach
-    poses (``delta`` below and above, see ``measure``), collides. The greedy tour keeps
+    poses (``delta`` below and above, see ``measure``), collides or needs a model holding torque
+    above ``max_hold`` of a joint's torque limit (see ``heavy``). The greedy tour keeps
     moves short and only links poses whose straight joint path is collision-free, with
     the same test as ``plan``, so no generated pose is skipped at run time.
     """
@@ -133,10 +135,12 @@ def generate_poses(robot: Robot, dynamics: Dynamics, n: int, seed: int = 0, rest
     window = robot.safety_window()                       # what measure() uses for the approach
     offsets = np.array([approach_offsets(p, delta, *window) for p in q])
     stacked = np.vstack([q, q - offsets, q + offsets])
+    keep = ~np.any(np.abs(dynamics.gravity(stacked)).reshape(3, len(q), -1).max(axis=0)
+                   > max_hold * robot.torque_limits(), axis=1)
     report = check_clearance(dynamics, stacked, np.arange(float(len(stacked))), table_z, clearance, reference_q=reference)
     if report is not None:
-        bad = {int(round(event["time"])) % len(q) for event in report["events"]}
-        q = q[[i for i in range(len(q)) if i not in bad]]
+        keep[[int(round(event["time"])) % len(q) for event in report["events"]]] = False
+    q = q[keep]
     span = np.where(sampled, (upper - lower) / np.maximum(weights, 1e-9), np.inf)
     coords = q / span
     regions = [(q[:, j] >= lo) & (q[:, j] <= hi) for j, lo, hi, _ in focus]
@@ -204,11 +208,12 @@ def save_pose_file(path: str | Path, poses: np.ndarray, **meta) -> None:
 
 
 def plan(robot: Robot, dynamics: Dynamics, poses: np.ndarray, rest: np.ndarray, args) -> tuple[np.ndarray, list[str]]:
-    """Keep poses inside the window whose path (from rest, through the previous pose, and the two
-    approach moves of ``measure``) is collision-free."""
+    """Keep poses inside the window, within the holding-torque margin (``heavy``), whose path (from
+    rest, through the previous pose, and the two approach moves of ``measure``) is collision-free."""
     # Only 2 deg of the window are reserved for the approach; measure() shrinks the
     # approach offset of joints close to a limit (two-sided approach still cancels friction).
     lower, upper = robot.safety_window(margin_deg=2.0)
+    limit = args.max_hold * robot.torque_limits()
     kept, notes, previous = [], [], rest
     reference = structural_reference(robot)
     for pose in poses:
@@ -217,10 +222,11 @@ def plan(robot: Robot, dynamics: Dynamics, poses: np.ndarray, rest: np.ndarray, 
             notes.append(f"跳过 {label}：超出安全窗口")
             continue
         offsets = approach_offsets(pose, np.radians(args.delta), *robot.safety_window())
-        stops = [previous, pose - offsets, pose, pose + offsets, pose]
-        path = np.vstack([np.linspace(a, b, 30) for a, b in zip(stops[:-1], stops[1:])])
-        ok, text = describe_clearance(check_clearance(dynamics, path, np.arange(float(len(path))), args.table_z,
-                                                      args.clearance, reference_q=[previous, *reference]))
+        reason = heavy(dynamics.gravity, pose, offsets, limit)
+        if reason:
+            notes.append(f"跳过 {label}：{reason}")
+            continue
+        ok, text = approach_clear(dynamics, previous, pose, offsets, args, reference)
         if not ok:
             notes.append(f"跳过 {label}：从上一位姿过去会碰撞（{text}）")
             continue
@@ -229,23 +235,98 @@ def plan(robot: Robot, dynamics: Dynamics, poses: np.ndarray, rest: np.ndarray, 
     return np.array(kept).reshape(-1, robot.dof), notes
 
 
+def heavy(holding, pose: np.ndarray, offsets: np.ndarray, limit: np.ndarray) -> str:
+    """Why ``pose`` or one of its approach poses needs more holding torque than ``limit``, or "".
+
+    The margin to the safety stop (``--torque-ratio``) is for what the model does not know: a
+    cable pulling, a non-rigid load, motor torque feedback away from its calibrated range."""
+    torque = np.abs(holding(np.vstack([pose - offsets, pose, pose + offsets]))).max(axis=0)
+    ratio = torque / limit
+    if np.all(ratio <= 1.0):
+        return ""
+    j = int(np.argmax(ratio))
+    return f"预计 J{j + 1} 保持力矩 {torque[j]:.1f} N·m，超过余量上限 {limit[j]:.1f} N·m（--max-hold）"
+
+
+def approach_clear(dynamics: Dynamics, previous: np.ndarray, pose: np.ndarray, offsets: np.ndarray, args,
+                   reference: np.ndarray) -> tuple[bool, str]:
+    """Clearance of the moves ``measure`` makes from ``previous`` to ``pose``."""
+    stops = [previous, pose - offsets, pose, pose + offsets, pose]
+    path = np.vstack([np.linspace(a, b, 30) for a, b in zip(stops[:-1], stops[1:])])
+    return describe_clearance(check_clearance(dynamics, path, np.arange(float(len(path))), args.table_z,
+                                              args.clearance, reference_q=[previous, *reference]))
+
+
+class HoldingTorque:
+    """Holding torque of the poses still to come: the feedforward model plus a rigid correction of
+    the tip link (mass, first moment) fitted to the poses this run has measured, so a load whose
+    model is off, or missing, is learned as the run goes. The prior (``mass`` kg, ``moment`` kg·m)
+    keeps the first samples from extrapolating; the measurement noise is ``noise`` N·m on the
+    strongest joint, scaled by each joint's torque limit.
+
+    It only predicts; the feedforward stays the model. What a rigid load cannot represent (cable
+    forces, friction) is held at each pose by the load balance's integral, which needs no model."""
+
+    def __init__(self, dynamics: Dynamics, torque_limits: np.ndarray, mass: float = 1.0, moment: float = 0.15,
+                 noise: float = 0.3):
+        self.dyn = dynamics
+        self.normal = np.diag(1.0 / np.array([mass, moment, moment, moment]) ** 2)
+        self.rhs = np.zeros(PER_LINK)
+        self.noise = noise * torque_limits / torque_limits.max()
+        self.delta = np.zeros(PER_LINK)               # [m, h_x, h_y, h_z] added to the tip link
+
+    def tip(self, q) -> np.ndarray:
+        return gravity_regressor(self.dyn.robot, q)[:, :, -PER_LINK:]
+
+    def add(self, q: np.ndarray, tau: np.ndarray) -> None:
+        Y = self.tip(q)[0] / self.noise[:, None]
+        self.normal += Y.T @ Y
+        self.rhs += Y.T @ ((np.asarray(tau, dtype=float) - self.dyn.gravity(q)[0]) / self.noise)
+        self.delta = np.linalg.solve(self.normal, self.rhs)
+
+    def __call__(self, q) -> np.ndarray:
+        q = np.atleast_2d(np.asarray(q, dtype=float))
+        return self.dyn.gravity(q) + self.tip(q) @ self.delta
+
+    def surprise(self, q: np.ndarray, tau: np.ndarray) -> np.ndarray:
+        """Per joint, how many standard deviations a measurement is off the prediction."""
+        Y = self.tip(q)[0]
+        variance = np.einsum("ij,jk,ik->i", Y, np.linalg.inv(self.normal), Y) + self.noise ** 2
+        return (np.asarray(tau, dtype=float) - self(q)[0]) / np.sqrt(variance)
+
+
+def write_static(path: Path, results: list[dict], dof: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow([f"{k}{i}" for k in ("q_deg", "tau_meas", "tau_model", "static_friction", "tau_cmd")
+                         for i in range(1, dof + 1)])
+        for r in results:
+            writer.writerow([*np.degrees(r["q"]), *r["tau"], *r["gravity"], *r["friction"], *r["command"]])
+
+
 def approach_offsets(pose: np.ndarray, delta: float, lower: np.ndarray, upper: np.ndarray) -> np.ndarray:
     """Per-joint approach offset: ``delta``, reduced near a limit, at least 1 deg."""
     room = np.minimum(pose - lower, upper - pose) - np.radians(1.0)
     return np.clip(room, np.radians(1.0), delta)
 
 
-def measure(ctrl: Controller, pose: np.ndarray, delta: float, args) -> dict:
+def measure(ctrl: Controller, pose: np.ndarray, delta: float, args, label: str = "") -> dict:
     samples = {}
     balanced = isinstance(ctrl, LoadBalancedController)
     offsets = approach_offsets(pose, delta, *ctrl.arm.safety_window())
     for side, sign in (("below", -1.0), ("above", 1.0)):
+        name = "下方" if sign < 0 else "上方"
+        ctrl.phase = f"{label} 移到{name}接近点"
         ctrl.move_to(pose + sign * offsets, args.move_speed)
+        ctrl.phase = f"{label} 从{name}到位"
         ctrl.move_to(pose, args.move_speed / 2)
         ctrl.hold(pose, args.settle)
         if balanced:
+            ctrl.phase = f"{label} 从{name}到位后建立平衡"
             ctrl.settle(pose)
             ctrl.frozen = True                    # constant command while the samples are averaged
+        ctrl.phase = f"{label} 从{name}到位后采样"
         rows, command = [], []
 
         def record(state):
@@ -309,10 +390,17 @@ def main(argv=None) -> None:
     parser.add_argument("--out", help="输出 CSV（默认 <结果目录>/static/check.csv）")
     parser.add_argument("--save-calibration", action="store_true",
                         help="把测得的力矩增益写入该机器人的标定文件（~/.cache/rebot_taccap_identification/calibration/robots/<类型>/<id>.json）")
+    parser.add_argument("--max-hold", type=float, default=0.6,
+                        help="位姿的模型保持力矩不超过力矩上限的这个比例，否则跳过；采集中用已测位姿修正的负载重新预测"
+                             "（给线缆、非刚性负载等模型之外的力矩留余量，安全停止在 --torque-ratio）")
+    parser.add_argument("--max-surprise", type=float, default=5.0,
+                        help="实测力矩偏离在线预测超过这么多个标准差的位姿不计入数据（接触、线缆拉扯、卡滞），另存到 diagnostics/")
     parser.add_argument("--balance-load", action=argparse.BooleanOptionalAction, default=None,
                         help="未知负载静态采集：受限积分建立平衡，保持误差/力矩保护；--payload-cad 或 --with-tool 时默认开启")
     args = parser.parse_args(argv)
 
+    if not 0 < args.max_hold < args.torque_ratio:
+        raise SystemExit("--max-hold 需要在 0 和 --torque-ratio 之间")
     robot, dynamics = open_robot(args)
     dof = robot.dof
     rest, delta = args.rest, np.radians(args.delta)
@@ -326,7 +414,8 @@ def main(argv=None) -> None:
         else:
             sample = None
         requested = generate_poses(robot, dynamics, args.random, args.seed, rest, args.table_z, args.clearance,
-                                   focus=parse_focus(args.focus, dof), sample=sample, delta=np.radians(args.delta))
+                                   focus=parse_focus(args.focus, dof), sample=sample, delta=np.radians(args.delta),
+                                   max_hold=args.max_hold)
     else:
         raise SystemExit("需要 --random N 或 --poses 文件")
     poses, notes = plan(robot, dynamics, requested, rest, args)
@@ -349,33 +438,68 @@ def main(argv=None) -> None:
         balance = args.payload_cad or args.with_tool or args.tool_length > 0
     ctrl = make_controller(robot, dynamics, args, check_window=False,
                            controller_type=LoadBalancedController if balance else Controller)
-    results = []
+    results, rejected = [], []
+    holding, limit = HoldingTorque(dynamics, robot.torque_limits()), args.max_hold * robot.torque_limits()
+    reference = structural_reference(robot)
+    diagnostics = out.parent / "diagnostics"      # outside static/*.csv: never offered as data
     try:
         robot.connect()
         q_now = ctrl.engage()
         print(f"[engage] 当前位姿 {np.round(np.degrees(q_now), 1).tolist()}°")
+        previous, skipped, failures = rest, False, 0
         for index, pose in enumerate(poses, start=1):
-            print(f"[{index}/{len(poses)}] {np.round(np.degrees(pose)).astype(int).tolist()}°", flush=True)
-            results.append(measure(ctrl, pose, delta, args))
+            label = f"[{index}/{len(poses)}] {np.round(np.degrees(pose)).astype(int).tolist()}°"
+            offsets = approach_offsets(pose, delta, *robot.safety_window())
+            reason = heavy(holding, pose, offsets, limit)
+            if not reason and skipped:            # the planned path came through the skipped pose
+                ok, text = approach_clear(dynamics, previous, pose, offsets, args, reference)
+                reason = "" if ok else f"从上一位姿过去会碰撞（{text}）"
+            if reason:
+                print(f"  跳过 {label}：{reason}", flush=True)
+                skipped = True
+                continue
+            print(label, flush=True)
+            # The arm is at (or next to) this pose from here on, whatever the outcome.
+            previous, skipped = pose, False
+            try:
+                result = measure(ctrl, pose, delta, args, label)
+                surprise = holding.surprise(result["q"], result["tau"])
+                if np.abs(surprise).max() <= args.max_surprise:
+                    results.append(result)
+                    holding.add(result["q"], result["tau"])
+                    failures = 0
+                    continue
+                j = int(np.argmax(np.abs(surprise)))
+                error = result["tau"][j] - holding(result["q"])[0, j]
+                reason = (f"J{j + 1} 实测力矩比预测{'大' if error > 0 else '小'} {abs(error):.2f} N·m"
+                          f"（{abs(surprise[j]):.0f}σ），疑似接触、线缆拉扯或卡滞；不计入数据")
+                rejected.append(result)
+            except NotSettled as exc:
+                reason = f"{exc}；跳过"
+            failures += 1
+            trace = ctrl.save_trace(diagnostics / f"{out.stem}_p{index}.csv")
+            print(f"  ⚠ {label}：{reason}" + (f"\n    最近 8 s 的反馈：{trace}" if trace else ""), flush=True)
+            if failures >= 3:
+                raise SafetyStop(f"连续 {failures} 个位姿异常，停止采集：检查线缆、夹爪是否碰到桌面或机械臂")
         ctrl.safe_stop(rest, args.move_speed)
     except (SafetyStop, KeyboardInterrupt) as exc:
         if robot.enabled:
+            trace = ctrl.save_trace(diagnostics / f"{out.stem}_stop.csv")
             ctrl.safe_stop(rest, args.move_speed, reason=str(exc) or "Ctrl+C")
+            if trace:
+                print(f"[stop] 停止前 8 s 的反馈：{trace}")
         else:
             print(f"\n[error] {exc}")
             return
     finally:
         robot.disconnect()
+    if rejected:
+        write_static(diagnostics / f"{out.stem}_rejected.csv", rejected, dof)
+        print(f"\n{len(rejected)} 个位姿不计入数据，另存在 {diagnostics / f'{out.stem}_rejected.csv'}")
     if not results:
         return
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("w", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow([f"{k}{i}" for k in ("q_deg", "tau_meas", "tau_model", "static_friction", "tau_cmd")
-                         for i in range(1, dof + 1)])
-        for r in results:
-            writer.writerow([*np.degrees(r["q"]), *r["tau"], *r["gravity"], *r["friction"], *r["command"]])
+    write_static(out, results, dof)
     g = np.array([r["gravity"] for r in results])
     tau = np.array([r["tau"] for r in results])
     friction = np.array([r["friction"] for r in results])

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -226,6 +227,9 @@ class Controller:
         self.tau_cmd = np.zeros(self.dof)
         self.stream = False          # --stream: machine-readable "@state {...}" lines for the GUI
         self._last_stream = 0.0
+        self.phase = ""              # what the arm is doing, for the stop report
+        self.last_state: State | None = None
+        self.trace = deque(maxlen=int(8 * rate))      # recent feedback and commands (save_trace)
 
     def send(self, q, dq, tau, kp=None, kd=None) -> None:
         tau = np.clip(np.asarray(tau, dtype=float) / self.torque_gain, -self.tmax, self.tmax)
@@ -243,6 +247,10 @@ class Controller:
 
     def state(self) -> State | None:
         state = self.arm.read()
+        if state is not None:
+            self.last_state = state
+            if self.q_cmd is not None:
+                self.trace.append((state.stamp, state.q, self.q_cmd, state.tau, self.tau_cmd))
         if self.stream and state is not None and state.stamp - self._last_stream >= 0.05:
             self._last_stream = state.stamp
             print("@state " + json.dumps({
@@ -309,10 +317,37 @@ class Controller:
             self.send(q, dq, self.dyn.gravity(q)[0])     # slow moves: gravity feedforward is enough
             self.ticker.wait()
 
+    def stop_report(self) -> list[str]:
+        """Where the arm was and what it was told when it stopped."""
+        state = self.last_state
+        if state is None or self.q_cmd is None:
+            return []
+        return [f"[stop] 阶段：{self.phase or '—'}",
+                f"[stop] 实测 q {np.round(np.degrees(state.q), 1).tolist()}°  "
+                f"指令 q {np.round(np.degrees(self.q_cmd), 1).tolist()}°",
+                f"[stop] 实测力矩 {np.round(state.tau, 2).tolist()}  "
+                f"模型重力 {np.round(self.dyn.gravity(state.q)[0], 2).tolist()}  "
+                f"前馈 {np.round(self.tau_cmd, 2).tolist()} N·m"]
+
+    def save_trace(self, path: str | Path) -> Path | None:
+        """The last seconds of feedback and commands (time, q, q_cmd [deg], tau, tau_cmd [N·m]) as CSV."""
+        if not self.trace:
+            return None
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        rows = np.array([[t, *np.degrees(q), *np.degrees(q_cmd), *tau, *tau_cmd]
+                         for t, q, q_cmd, tau, tau_cmd in self.trace])
+        rows[:, 0] -= rows[-1, 0]
+        names = ["t"] + [f"{k}{i}" for k in ("q_deg", "q_cmd_deg", "tau_meas", "tau_cmd") for i in range(1, self.dof + 1)]
+        np.savetxt(path, rows, delimiter=",", header=",".join(names), comments="", fmt="%.5g")
+        return path
+
     def safe_stop(self, rest: np.ndarray, speed: float = 0.3, reason: str = "") -> None:
         """Hold where we are, go to ``rest`` slowly and disable. Ctrl+C here disables at once."""
         if reason:
             print(f"\n[stop] {reason}")
+            for line in self.stop_report():
+                print(line)
         try:
             state = self.wait_state(0.3)
             relaxed = Limits(self.limits.lower, self.limits.upper, self.limits.torque, max_tracking=np.radians(20.0),
