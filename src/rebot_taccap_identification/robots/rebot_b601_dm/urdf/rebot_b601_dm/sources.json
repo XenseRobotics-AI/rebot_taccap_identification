@@ -6,11 +6,6 @@
       "url": "https://github.com/hopcan/reBot-Isaacsim.git",
       "commit": "1958511342dab181b94a2b7c068c77e54eb85d3a",
       "clean": true
-    },
-    "reBotArm_control_py": {
-      "url": "git@github.com:Seeed-Projects/reBotArm_control_py.git",
-      "commit": "6415d43130d1e143c70dc106096a857ac5556f81",
-      "clean": true
     }
   },
   "inputs": {
@@ -19,8 +14,10 @@
       "sha256": "c66e82962ee1c7518709f67ab816dafa5f2b1ee7849985d1a361ebfce9efbc33"
     },
     "arm_inertials": {
-      "path": "urdf/DM/urdf/ReBot_Arm_DM.urdf",
-      "sha256": "cd3054edec30b70a3afb2e97eb288ad4943a31c9746f8775703733b64ac0c3cf"
+      "repository": "reBot-Isaacsim",
+      "license": "MIT",
+      "path": "urdf/reBot_B601_DM/urdf/reBot_B601_DM.urdf",
+      "sha256": "c66e82962ee1c7518709f67ab816dafa5f2b1ee7849985d1a361ebfce9efbc33"
     },
     "adapter": {
       "path": "src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/urdf/rebot_b601_rs.urdf",
@@ -34,7 +31,7 @@
   },
   "changes": [
     "Keep simulation mesh geometry and joint1..5 geometry unchanged",
-    "Replace base_link and link1..5 inertials with nominal control-repository DM parameters",
+    "Keep base_link and link1..5 inertia priors from the MIT-licensed simulation model",
     "Remove stock flange/gripper; link6 is massless bare motor output",
     "joint6 origin x=0.028008 (stock 0.023692 + 0.004316 m), as libpyrebot DM_Taccap",
     "Attach existing C1 CAD at link6, xyz=0, rpy=[pi/2,0,pi/2]; no identified RS masses"
@@ -68,14 +65,16 @@
     "meshes/rebot_b601_dm/pla5_white.STL": "b3128e65c3acd00fd97ad7517a62b5ef05cc567d58ec6da48e62f1fe2e4bf293"
   },
   "licenses": {
-    "LICENSES/C1_ADAPTER_NOTICE.md": "1ca00a0ec72b237343dc3d307db8a774f6269a6011308a32db8f1e63e8612663",
-    "LICENSES/DM_ARM_INERTIALS_NOTICE.md": "f2163443c79c6eb298a44398361072cc8efeff32a296e3f487c779eae2c85cb4",
-    "LICENSES/REBOT_ISAACSIM_MIT": "3c46ce472bd9cd9c419bae897f4ced4ae73691c41fdd8eafa8a4b673725664e8"
+    "LICENSES/C1_ADAPTER_NOTICE.md": "0564dcb3ec23d0c601081e00c4aedbf301ed6ba0c212db704a50fe8f3cbee7cc",
+    "LICENSES/DM_ARM_INERTIALS_NOTICE.md": "b171a0209253343e91a9c76d138af87d5d4712f9d36024b8102fe1f10cad9ff1",
+    "LICENSES/REBOT_ISAACSIM_MIT": "3c46ce472bd9cd9c419bae897f4ced4ae73691c41fdd8eafa8a4b673725664e8",
+    "LICENSES/TACCAP_CAD_PERMISSION.md": "24488ff8c50c793ffe1cfa5065a23ad2459f4692ddf3f8f572c31334d26a6690"
   },
-  "urdf_sha256": "631da8f074efa6cd222825eb67d27fb548a2c91d47f49ad2cbf8f7fc5cb51520",
+  "urdf_sha256": "450066f14bfd56535b918700578e4448e62fbbc3b908eb410b9a0d51aec464be",
   "external_gripper": {
     "repository": "https://github.com/XenseRobotics-AI/XTac-UMI-Description.git",
-    "manifest": "ros/taccap_description/asset.json",
+    "branch": "main",
+    "entrypoint": "ros/taccap_description/urdf/taccap_g1_slave.urdf",
     "mount_configuration": "RebotB601DMConfig.gripper_parent_link/gripper_xyz/gripper_rpy"
   }
 }

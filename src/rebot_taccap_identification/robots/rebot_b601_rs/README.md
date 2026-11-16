@@ -7,9 +7,10 @@
 | URDF 中 link6 以下（负载） | 质量 |
 |---|---|
 | C1 转接件 `adapter_link` | 0.020 kg |
-| 夹爪本体 `taccap_base_link` | 0.415 kg |
-| 左右手指（转动关节，左指 mimic 右指） | 2 × 0.367 kg |
-| 合计（手指在 0 位，质心在 link6 系 [−24.1, 0.3, 104.1] mm） | 1.169 kg |
+| 夹爪本体 `taccap_base_link` | 0.153 kg |
+| 电机 / 相机（固定连杆） | 0.299 / 0.018 kg |
+| 左右手指（转动关节，左指 mimic 右指） | 2 × 0.140 kg |
+| 合计（手指在 0 位，质心在 link6 系 [−23.6, 0.6, 67.2] mm） | 0.770 kg |
 
 ```bash
 rebot_taccap_identification ping                          # 默认 can0
@@ -28,9 +29,9 @@ rebot_taccap_identification studio
   sudo ip link set can0 up
   ```
 - 末端空载，`q = 0` 对应 URDF 零位。电机原始坐标与 URDF 一致（方向 1、偏置 0），静态核对会再验证一遍。
-- 本项目只保存机械臂与 C1 的 URDF 和网格，位于 `urdf/rebot_b601_rs/`（来源和网格哈希见 `sources.json`，许可见 `LICENSES/`）。夹爪来自 `third_party/XTac-UMI-Description` 子模块的资产清单，运行时装配，不复制进本包；在项目根目录用 `git submodule update --init --remote -- third_party/XTac-UMI-Description` 跟进最新 `main`。
+- 本项目只保存机械臂与 C1 的 URDF 和网格，位于 `urdf/rebot_b601_rs/`（来源和网格哈希见 `sources.json`，许可见 `LICENSES/`）。夹爪来自 `third_party/XTac-UMI-Description` 子模块的裸从夹爪 URDF（兼容旧版资产清单），运行时装配，不复制进本包；在项目根目录用 `git submodule update --init --remote -- third_party/XTac-UMI-Description` 跟进最新 `main`。
 - `--robot.gripper_repo=<目录>` 可改用独立夹爪仓库，`--robot.gripper_urdf=<文件>` 可直接选择外部夹爪 URDF。安装接口由 `gripper_parent_link`、`gripper_xyz` 和 `gripper_rpy` 配置；默认连接 C1 的 `adapter_link`，沿其 y 轴偏移 14 mm，绕 y、z 各转 90°。使用的是裸从夹爪，不再重复加入 Asm_link 转接件。
-- `--robot.urdf=<路径>` 指定的是完整自定义机器人模型，按该文件加载，不额外挂载默认夹爪。上面的 CAD 质量/质心表为初始资产的参考值，更新第三方模型后以新模型为准。
+- `--robot.urdf=<路径>` 指定的是完整自定义机器人模型，按该文件加载，不额外挂载默认夹爪。上面的 CAD 质量/质心表为夹爪版本 `604573a` 的参考值，更新第三方模型后以新模型为准。
 - 默认配置使用包资源 URI，外部仓库示例使用 `--robot.gripper_repo=../XTac-UMI-Description`。组合模型与辨识模型都保存相对网格路径及随附资源，结果 JSON 的模型引用相对于其所在目录解析。
 - C1 的安装分度为电机侧 +90°、夹爪侧 −90°，`joint6` 是原厂零位、限位 ±3.14，与 xense-description 的 `seeed_rebotb601rs_single` 装配一致。
 - ⚠️ 不要在装好的机械臂上运行会把当前位置写入 flash 作为零点的工具（例如 motorbridge 的 `robstride_all_interfaces_demo.py`）。

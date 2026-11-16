@@ -27,10 +27,14 @@ def resource_digest(urdf: str | Path) -> str:
     """Cache identity for a model and its current mesh files, without storing host paths."""
     urdf = Path(urdf)
     digest = hashlib.sha256(urdf.read_bytes())
+    meshes = []
     for mesh in ET.parse(urdf).iter("mesh"):
         path = _resolve_mesh(mesh.get("filename", ""), urdf)
+        meshes.append(path)
         stat = path.stat()
         digest.update(f"{mesh.get('filename')}:{stat.st_size}:{stat.st_mtime_ns}".encode())
+    for target, source in sorted(asset_notices(meshes).items()):
+        digest.update(target.encode() + b"\0" + source.read_bytes())
     return digest.hexdigest()
 
 
@@ -57,27 +61,39 @@ def copy_file(source: Path, destination: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def copy_asset_notices(meshes, out_dir: Path) -> None:
-    """Copy notices from source asset packages or an already assembled URDF bundle."""
+def _asset_package(path: Path) -> bool:
+    return any((path / name).is_file() for name in ("asset.json", "sources.json", "package.xml"))
+
+
+def asset_notices(meshes) -> dict[str, Path]:
+    """Map output notice paths to sources, preserving ROS packages and saved bundles."""
     packages = set()
     for mesh in meshes:
         package = next((p for p in Path(mesh).parents
-                        if (p / "asset.json").is_file() or (p / "sources.json").is_file()
+                        if _asset_package(p)
                         or ((p / "LICENSES").is_dir() and (p / "meshes").is_dir())), None)
         if package is not None:
             packages.add(package)
+    notices = {}
     for package in sorted(packages):
-        original = (package / "asset.json").is_file() or (package / "sources.json").is_file()
-        target = out_dir / "LICENSES" / package.name if original else out_dir
+        original = _asset_package(package)
+        target = Path("LICENSES") / package.name if original else Path()
         files = [p for p in (package / "LICENSES").rglob("*") if p.is_file()]
         if original:
             files += [p for p in (package / "NOTICE.md", package / "LICENSE") if p.is_file()]
         for source in files:
-            copy_file(source, target / source.relative_to(package))
-        if (package / "asset.json").is_file() and not (package / "LICENSE").is_file():
+            notices[(target / source.relative_to(package)).as_posix()] = source
+        if ((package / "asset.json").is_file() or (package / "package.xml").is_file()) and not (package / "LICENSE").is_file():
             license_file = next((p / "LICENSE" for p in package.parents if (p / "LICENSE").is_file()), None)
             if license_file is not None:
-                copy_file(license_file, target / "LICENSE")
+                notices[(target / "LICENSE").as_posix()] = license_file
+    return notices
+
+
+def copy_asset_notices(meshes, out_dir: Path) -> None:
+    """Copy notices from source asset packages or an already assembled URDF bundle."""
+    for relative, source in asset_notices(meshes).items():
+        copy_file(source, out_dir / relative)
 
 
 def copy_meshes(root: ET.Element, source_urdf: Path, output_urdf: Path) -> dict[str, Path]:

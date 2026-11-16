@@ -32,9 +32,9 @@ bash examples/rebot_b601_rs_taccap_v2/reproduce.sh
 2. `payload`：在辨识出的本体上，用 `data/gripper/` 辨识 C1 + 夹爪合起来的质量、质心，并重新估计 J6 力矩偏置。
 3. `package`：导出带夹爪、不带夹爪两个完整 URDF 包。
 
-结果在 `output/`，可以和 `reference/` 对照。用的是辨识时的数据和设置，结果应该与 `reference/` 一致。
+结果在 `output/`，可以和 `reference/` 对照。用的是辨识时的数据和设置，质量、质心和偏置应与 `reference/` 一致；CAD 惯量随第三方模型版本变化。
 
-注意：负载惯量按 CAD 形状缩放，来自 `third_party/XTac-UMI-Description` 当前的夹爪模型；夹爪仓库更新后，导出包里的惯量（不含质量、质心）可能和 Release 中的略有不同。
+注意：负载惯量按 CAD 形状缩放，来自 `third_party/XTac-UMI-Description` 当前的夹爪模型；夹爪仓库更新后，导出包里的惯量和几何可能与历史 Release 不同，质量、质心和偏置仍由相同数据拟合。当前 `604573a` 的 C1 + 夹爪 CAD 质量为 0.770 kg，以下 1.169 kg 仅指采集示例时的旧版资产。
 
 ## 设置
 
@@ -92,4 +92,4 @@ bash examples/rebot_b601_rs_taccap_v2/reproduce.sh
 - **伸直时 J2 偏小约 4%。** J2 负载大于 8 N·m 的姿态，实测力矩比模型大 3–5%（电机热时更明显）。free 模式重力补偿在伸直姿态会缓慢下沉；把 J2 前馈倍率设为 1.04（工作台第 3 步“前馈倍率”，或命令行 `--ff-scale 1 1.04 1 1 1 1`）后明显改善。这个倍率没有写进模型。
 - **负载训练数据偏少。** 4 组随机负载数据都在中途停止（当时前馈未含负载，伸直姿态超出跟踪误差上限），伸直姿态主要靠漂移补点覆盖。
 - **惯量不是辨识值。** 静态数据看不到转动惯量：本体沿用 CAD，负载按 CAD 形状缩放到辨识质量。
-- **C1 转接件网格的再分发许可尚未确认**，见导出包 `LICENSES/rebot_b601_rs/LICENSES/C1_ADAPTER_NOTICE.md`。
+- **C1 转接件网格及随附数据采用与 XTac-UMI-Description 相同的 MIT 许可及 Xense Robotics 版权署名**，见导出包 `LICENSES/rebot_b601_rs/LICENSES/C1_ADAPTER_NOTICE.md`。

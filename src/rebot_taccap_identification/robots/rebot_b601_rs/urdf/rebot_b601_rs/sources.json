@@ -64,14 +64,15 @@
   },
   "urdf_sha256": "5319bc11381d2c9e23080f90e14f4fcf2768c8988f748aa462d77837074c4053",
   "licenses": {
-    "LICENSES/C1_ADAPTER_NOTICE.md": "1ca00a0ec72b237343dc3d307db8a774f6269a6011308a32db8f1e63e8612663",
-    "LICENSES/REBOT_B601_RS_CERN-OHL-W-2.0": "e258a9c6833bfd17fb90252df8c33e29d13fabc2768508248927824c17878db7"
+    "LICENSES/C1_ADAPTER_NOTICE.md": "0564dcb3ec23d0c601081e00c4aedbf301ed6ba0c212db704a50fe8f3cbee7cc",
+    "LICENSES/REBOT_B601_RS_CERN-OHL-W-2.0": "e258a9c6833bfd17fb90252df8c33e29d13fabc2768508248927824c17878db7",
+    "LICENSES/TACCAP_CAD_PERMISSION.md": "24488ff8c50c793ffe1cfa5065a23ad2459f4692ddf3f8f572c31334d26a6690"
   },
   "layout": "arm_and_c1_adapter_only",
   "external_gripper": {
     "repository": "https://github.com/XenseRobotics-AI/XTac-UMI-Description.git",
     "branch": "main",
-    "manifest": "ros/taccap_description/asset.json",
-    "mount_configuration": "RebotB601RSConfig.gripper_parent_link/gripper_xyz/gripper_rpy"
+    "mount_configuration": "RebotB601RSConfig.gripper_parent_link/gripper_xyz/gripper_rpy",
+    "entrypoint": "ros/taccap_description/urdf/taccap_g1_slave.urdf"
   }
 }

@@ -66,7 +66,7 @@ rebot_taccap_identification studio --robot.channel=can1
 rebot_taccap_identification studio --robot.type=rebot_b601_dm --robot.channel=/dev/ttyACM0
 ```
 
-RS 机械臂和 C1 转接件的 URDF、网格位于 `src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/`（来源见 [sources.json](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/sources.json)，许可见 [LICENSES/](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/LICENSES/)）。夹爪从 `third_party/XTac-UMI-Description` 的资产清单读取裸从夹爪 URDF；运行时与机械臂、C1 装配成带相对网格路径的资源快照，夹爪模型和网格的源文件仍由第三方仓库提供。`link6` 是第六轴输出面的虚拟坐标系，没有质量；C1 和夹爪挂在它下面，整体参与负载辨识。电机配置、默认增益、软限位见 [src/rebot_taccap_identification/robots/rebot_b601_rs/README.md](src/rebot_taccap_identification/robots/rebot_b601_rs/README.md)。
+RS 机械臂和 C1 转接件的 URDF、网格位于 `src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/`（来源见 [sources.json](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/sources.json)，许可见 [LICENSES/](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/LICENSES/)）。夹爪从 `third_party/XTac-UMI-Description` 读取裸从夹爪 `ros/taccap_description/urdf/taccap_g1_slave.urdf`（兼容旧版资产清单）；运行时与机械臂、C1 装配成带相对网格路径的资源快照，夹爪模型和网格的源文件仍由第三方仓库提供。`link6` 是第六轴输出面的虚拟坐标系，没有质量；C1 和夹爪挂在它下面，整体参与负载辨识。电机配置、默认增益、软限位见 [src/rebot_taccap_identification/robots/rebot_b601_rs/README.md](src/rebot_taccap_identification/robots/rebot_b601_rs/README.md)。
 
 默认机械臂路径使用 `package://rebot_taccap_identification/...` 资源标识，外部仓库可以使用项目相对路径。运行时组合模型会生成含相对网格引用的资源快照；辨识模型同样携带 `meshes/` 和许可文件，移动整个模型目录仍可加载。新结果 JSON 的文件引用相对于 JSON 所在目录解析。
 
@@ -144,7 +144,7 @@ RS 机械臂和 C1 转接件的 URDF、网格位于 `src/rebot_taccap_identifica
 碰撞检查包含每个位姿两侧 ±`--delta`（默认 5°）的接近动作；桌面高度（第 0 步，`--table-z`）要按实际填，安全距离 `--clearance` 默认 10 mm。
 4. 结果在 `gripper/models/<本体版本>/`，第 3 步的模型列表里显示为“辨识 v3+gripper”，可以直接做重力补偿检验。用它做补偿时，漂移分析的补点会存进 `gripper/`，按钮变成“载入建议位姿 → 第 4 步负载静态（gripper）”。
 
-负载关于质心的惯量取运行时组合 URDF 中 `link6` 以下部件（C1、第三方夹爪本体、手指在 0 位）的合成惯量，按辨识质量缩放（静态数据看不到惯量，重力补偿也不需要）；自定义完整 URDF 没有这些部件时按 `--radius` 的实心球估计。初始夹爪资产中这些部件合计约 1.169 kg，质心在 link6 系 [−24.1, 0.3, 104.1] mm；更新第三方模型后以实际加载的 URDF 为准。负载模型旁的 `arm_model/`、`cad_model/` 保存辨识时的本体和 CAD 资源快照，`payload.json` 以相对路径引用它们，并记录 CAD 快照的 SHA-256。导出该结果时使用记录的 CAD 快照，因此后来更新夹爪仓库也不会改变历史结果对应的几何。
+负载关于质心的惯量取运行时组合 URDF 中 `link6` 以下部件（C1、第三方夹爪本体、手指在 0 位）的合成惯量，按辨识质量缩放（静态数据看不到惯量，重力补偿也不需要）；自定义完整 URDF 没有这些部件时按 `--radius` 的实心球估计。当前夹爪资产（`604573a`）中这些部件合计 0.770 kg，质心在 link6 系 [−23.6, 0.6, 67.2] mm；更新第三方模型后以实际加载的 URDF 为准。负载模型旁的 `arm_model/`、`cad_model/` 保存辨识时的本体和 CAD 资源快照，`payload.json` 以相对路径引用它们，并记录 CAD 快照的 SHA-256。导出该结果时使用记录的 CAD 快照，因此后来更新夹爪仓库也不会改变历史结果对应的几何。
 
 ⚠ 任一电机驱动（MOS）温度超过 100 °C（`--max-temp`）时自动安全停止。
 
@@ -239,4 +239,6 @@ $$
 
 ## 许可证
 
-[MIT](LICENSE) © 2026 XenseRobotics-AI。随附的机械臂和 C1 资产许可见 [LICENSES/](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/LICENSES/)（机械臂 CERN-OHL-W-2.0，C1 转接件许可未确认）。第三方夹爪的 MIT 许可和来源声明由 [XTac-UMI-Description](third_party/XTac-UMI-Description) 仓库提供。
+[MIT](LICENSE) © 2026 XenseRobotics-AI。随附的机械臂和 C1 资产许可见 [LICENSES/](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/LICENSES/)（RS 机械臂 CERN-OHL-W-2.0；C1 转接件及其随附数据沿用 [XTac-UMI-Description 的 MIT 许可](third_party/XTac-UMI-Description/LICENSE)，版权署名为 Xense Robotics）。第三方夹爪的许可及例外以其 `NOTICE.md` 和 `LICENSES/` 为准，由 [XTac-UMI-Description](third_party/XTac-UMI-Description) 仓库提供。
+
+DM 本体几何和惯性先验使用 `reBot-Isaacsim` 的 MIT 资产，见 [DM 许可说明](src/rebot_taccap_identification/robots/rebot_b601_dm/urdf/rebot_b601_dm/LICENSES/DM_ARM_INERTIALS_NOTICE.md)。Xense 已确认 C1 和当前 TacCap CAD/网格及相关数据按 MIT 公开；夹爪的后续授权记录见 [TACCAP_CAD_PERMISSION.md](src/rebot_taccap_identification/robots/rebot_b601_rs/urdf/rebot_b601_rs/LICENSES/TACCAP_CAD_PERMISSION.md)，与保留的上游历史声明一同随导出包分发。

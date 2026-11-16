@@ -36,9 +36,9 @@ rebot_taccap_identification ping \
 - 默认力矩上限读取 URDF effort：`[27,27,27,7,7,7] N·m`；协议峰值和 URDF 上限都不是连续保持力矩额定值。可按实机条件用 `--robot.torque_limits='[...]'` 降低采集上限，不能超过协议量程。
 - 零位必须已按 B601 DM 机械零位完成标定。URDF 使用电机原始坐标，方向全为 `+1`、偏置全为 `0`；J2/J3 工作角为负，如 `[0,-0.8,-0.8,0.5,0,0] rad`。辨识输出的 `_offset.yaml` 是力矩偏置，不是零位校正。
 - 默认基座水平、向上安装，重力 `[0,0,-9.80665] m/s²`。其它安装方向需覆盖 `--robot.gravity='[gx,gy,gz]'`。
-- 本体质量、质心和惯量来自 `reBotArm_control_py` 当前 DM 控制模型，与 libpyrebot DM 本体一致；几何来自 `reBot-Isaacsim`。仿真仓库同名 DM 模型的质量明显偏小，不用于本体重力初值。这些仍是名义参数，需要实机辨识。去掉原厂末端安装盘和夹爪，`joint6` 位于电机直接输出面（link5 系 x=0.028008 m），与 libpyrebot `DM_Taccap` 对齐；`link6` 是无质量坐标系。
+- 本体质量、质心、惯量先验和几何均来自 MIT 授权的 `reBot-Isaacsim`。这是仿真 CAD 先验，质量较旧版控制模型小，需要重新进行本体辨识和独立验证，不能直接沿用旧版重力补偿效果。去掉原厂末端安装盘和夹爪，`joint6` 位于电机直接输出面（link5 系 x=0.028008 m），与 libpyrebot `DM_Taccap` 对齐；`link6` 是无质量坐标系。此次授权来源调整仅替换本体惯性先验，几何、关节和 link6 改装不变。
 - C1 使用仓库已有 CAD，TacCap 从外部 `XTac-UMI-Description` 组合；没有导入 RS 的辨识质量或偏置。`--robot.gripper_repo` / `--robot.gripper_urdf` 可替换夹爪模型；`--robot.urdf` 指定完整自定义模型时不再自动拼装。
-- 来源、文件哈希和修改说明见 [sources.json](urdf/rebot_b601_dm/sources.json)，许可证/声明随资源和导出包一起保存。可用 `scripts/build_dm_assets.py --dm-repo <reBot-Isaacsim目录> --dm-arm-repo <reBotArm_control_py目录>` 重建本体资源。
+- 来源、文件哈希和修改说明见 [sources.json](urdf/rebot_b601_dm/sources.json)，许可证/声明随资源和导出包一起保存。可用 `python scripts/build_dm_assets.py --dm-repo <reBot-Isaacsim目录>` 重建本体资源。
 
 ## 辨识顺序
 

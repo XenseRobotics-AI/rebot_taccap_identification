@@ -278,11 +278,10 @@ def test_dm_assets_and_gravity_sign():
                for e in np.eye(6)]
     np.testing.assert_allclose(gravity_torque(model, q)[0], numeric, atol=1e-7)
     assert gravity_torque(model, q)[0, 2] < 0  # holding torque at the DM working pose
-    # The simulation URDF's lighter CAD masses underpredicted real holding torque.
-    # Reference: reBotArm_control_py DM arm, with the output flange removed.
-    np.testing.assert_allclose(model.nominal_parameters[:, 0], [.1613, 1.3266, .8353, .5200, .3830, 0])
-    np.testing.assert_allclose(gravity_torque(model, q)[0],
-                               [0, -.5286634883, -3.7769542428, -.6371341848, -.0017957997, 0], atol=1e-8)
+    # MIT-licensed reBot-Isaacsim CAD priors; identify again before hardware use.
+    np.testing.assert_allclose(model.nominal_parameters[:, 0],
+                               [.0840736498625263, .710394385134637, .524941641463797,
+                                .191139210958177, .150004102098704, 0])
     root = ET.parse(r.config.resolve(r.config.urdf)).getroot()
     assert root.find("joint[@name='joint6']/origin").get("xyz") == "0.028008 0 0.04"
     for mesh in root.iter("mesh"):

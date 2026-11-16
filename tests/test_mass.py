@@ -126,8 +126,8 @@ def test_package_export_with_and_without_payload(tmp_path):
     payload = {"name": "gripper", "link": "link6", "mass_kg": 0.6, "com_m": [0.01, 0.0, 0.05],
                "inertial_10": payload_parameters(0.6, np.array([0.01, 0.0, 0.05]), cad[2] * 0.6 / cad[0]).tolist()}
     full = export_package(template, arm_urdf, tmp_path / "full", tip_link="link6", payload=payload)
-    # Arm and gripper both have a base_link.STL: sub-folders keep them apart.
-    assert {"rebot_b601_rs/base_link.STL", "taccap_description/base_link.STL"} <= set(full.meshes)
+    # Current upstream gripper calls its body mesh body_link.STL.
+    assert {"rebot_b601_rs/base_link.STL", "taccap_description/body_link.STL"} <= set(full.meshes)
     external_package = config.gripper_urdf_path.parents[1]
     assert (tmp_path / "full/LICENSES/taccap_description/NOTICE.md").read_bytes() == (external_package / "NOTICE.md").read_bytes()
     assert (tmp_path / "full/LICENSES/taccap_description/LICENSE").is_file()

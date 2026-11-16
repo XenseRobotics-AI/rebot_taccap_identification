@@ -11,23 +11,24 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 from .visual import _resolve_mesh
-from .resources import copy_asset_notices, copy_file, mesh_name
+from .resources import asset_notices, copy_asset_notices, copy_file, mesh_name
 
 
 def gripper_urdf(repository: str | Path) -> Path:
-    """Read the slave gripper entry point from XTac-UMI-Description's asset manifest."""
+    """Load the bare slave URDF from current checkouts or a legacy asset manifest."""
     package = Path(repository).expanduser().resolve() / "ros" / "taccap_description"
     manifest = package / "asset.json"
-    if not manifest.is_file():
+    entry = (json.loads(manifest.read_text())["entrypoints"]["default"] if manifest.is_file()
+             else "urdf/taccap_g1_slave.urdf")
+    path = (package / entry).resolve()
+    if not path.is_relative_to(package):
+        raise ValueError("夹爪清单不能引用资产包之外的 URDF")
+    if not path.is_file():
         raise FileNotFoundError(
-            f"夹爪仓库没有资产清单：{manifest}。先在项目目录运行 "
+            f"夹爪仓库缺少裸从夹爪 URDF：{path}。先在项目目录运行 "
             "git submodule update --init --remote -- third_party/XTac-UMI-Description；"
             "也可以用 --robot.gripper_repo=<仓库目录> 或 --robot.gripper_urdf=<URDF> 指定外部模型。"
         )
-    entry = json.loads(manifest.read_text())["entrypoints"]["default"]
-    path = (package / entry).resolve()
-    if not path.is_relative_to(package) or not path.is_file():
-        raise FileNotFoundError(f"夹爪清单引用的 URDF 不存在或不在资产包中：{path}")
     return path
 
 
@@ -127,7 +128,10 @@ def compose_urdf(arm: str | Path, gripper: str | Path, *, parent_link: str,
     root.insert(0, ET.Comment(f" Composed from arm {arm.name} and external gripper {gripper.name}. "))
     ET.indent(root, space="  ")
     data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
-    digest = hashlib.sha256(data + json.dumps(mesh_states).encode()).hexdigest()
+    identity = hashlib.sha256(data + json.dumps(mesh_states).encode())
+    for target, source in sorted(asset_notices(meshes.values()).items()):
+        identity.update(target.encode() + b"\0" + source.read_bytes())
+    digest = identity.hexdigest()
     cache = Path(cache_dir) if cache_dir is not None else Path(tempfile.gettempdir()) / "rebot_taccap_identification" / "urdf"
     output = cache / digest / f"{arm.stem}_taccap.urdf"
     if not output.is_file():
